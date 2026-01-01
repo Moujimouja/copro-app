@@ -150,6 +150,63 @@ async def get_copro(
     return copro
 
 
+def create_default_service_types(copro_id: int, db: Session):
+    """Créer les types de services par défaut pour une copropriété"""
+    default_service_types = [
+        {
+            "name": "Ascenseur",
+            "description": "Ascenseur de l'immeuble",
+            "category": "Équipement",
+            "order": 1
+        },
+        {
+            "name": "Éclairage",
+            "description": "Éclairage des parties communes",
+            "category": "Équipement",
+            "order": 2
+        },
+        {
+            "name": "Eau chaude",
+            "description": "Production d'eau chaude sanitaire",
+            "category": "Fluide",
+            "order": 3
+        },
+        {
+            "name": "Eau froide",
+            "description": "Distribution d'eau froide",
+            "category": "Fluide",
+            "order": 4
+        },
+        {
+            "name": "Porte parking",
+            "description": "Porte d'accès au parking",
+            "category": "Sécurité",
+            "order": 5
+        },
+    ]
+    
+    for st_data in default_service_types:
+        # Vérifier si le type existe déjà
+        existing = db.query(ServiceType).filter(
+            ServiceType.copro_id == copro_id,
+            ServiceType.name == st_data["name"]
+        ).first()
+        
+        if not existing:
+            service_type = ServiceType(
+                copro_id=copro_id,
+                name=st_data["name"],
+                description=st_data["description"],
+                category=st_data["category"],
+                default_status="operational",
+                order=st_data["order"],
+                is_active=True
+            )
+            db.add(service_type)
+    
+    db.commit()
+
+
 @router.post("/copro", response_model=CoproResponse, status_code=status.HTTP_201_CREATED)
 async def create_copro(
     copro_data: CoproCreate,
@@ -177,6 +234,9 @@ async def create_copro(
     db.add(db_copro)
     db.commit()
     db.refresh(db_copro)
+    
+    # Créer les types de services par défaut
+    create_default_service_types(db_copro.id, db)
     
     return db_copro
 
@@ -373,6 +433,16 @@ async def list_service_types(
     copro = db.query(Copro).filter(Copro.is_active == True).first()
     if not copro:
         return []
+    
+    # S'assurer que les types de services par défaut existent
+    service_types_count = db.query(ServiceType).filter(
+        ServiceType.copro_id == copro.id,
+        ServiceType.is_active == True
+    ).count()
+    
+    if service_types_count == 0:
+        # Créer les types de services par défaut s'ils n'existent pas
+        create_default_service_types(copro.id, db)
     
     service_types = db.query(ServiceType).filter(
         ServiceType.copro_id == copro.id,
