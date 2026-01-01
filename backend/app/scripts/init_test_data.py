@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.db import SessionLocal, engine, Base
 from app.models.copro import Copro, Building, ServiceType, ServiceInstance
 from app.models.user import User
+from app.models.ticket import Ticket
+from app.models.status import Incident, IncidentUpdate, IncidentComment
 import bcrypt
 
 
@@ -59,19 +61,57 @@ def init_test_data():
         existing_copro = db.query(Copro).filter(Copro.is_active == True).first()
         if existing_copro:
             print("⚠️  Une copropriété existe déjà. Suppression des données existantes pour réinitialisation...")
-            # Mettre à NULL les références aux bâtiments dans les utilisateurs
-            from app.models.user import User
-            db.query(User).filter(User.copro_id == existing_copro.id).update({"building_id": None})
-            # Supprimer les équipements
-            db.query(ServiceInstance).filter(ServiceInstance.copro_id == existing_copro.id).delete()
-            # Supprimer les types de services
-            db.query(ServiceType).filter(ServiceType.copro_id == existing_copro.id).delete()
-            # Supprimer les bâtiments
-            db.query(Building).filter(Building.copro_id == existing_copro.id).delete()
-            # Supprimer la copropriété
+            copro_id = existing_copro.id
+            
+            # Supprimer dans l'ordre pour respecter les contraintes de clés étrangères
+            
+            # 1. Supprimer les commentaires d'incidents
+            incidents = db.query(Incident).filter(Incident.copro_id == copro_id).all()
+            incident_ids = [inc.id for inc in incidents]
+            if incident_ids:
+                db.query(IncidentComment).filter(IncidentComment.incident_id.in_(incident_ids)).delete()
+                db.query(IncidentUpdate).filter(IncidentUpdate.incident_id.in_(incident_ids)).delete()
+                print(f"  ✅ Supprimé {len(incident_ids)} incidents et leurs commentaires/mises à jour")
+            
+            # 2. Supprimer les incidents
+            db.query(Incident).filter(Incident.copro_id == copro_id).delete()
+            
+            # 3. Supprimer les tickets
+            tickets_count = db.query(Ticket).filter(Ticket.copro_id == copro_id).count()
+            db.query(Ticket).filter(Ticket.copro_id == copro_id).delete()
+            if tickets_count > 0:
+                print(f"  ✅ Supprimé {tickets_count} tickets")
+            
+            # 4. Mettre à NULL les références aux bâtiments dans les utilisateurs (sauf admin)
+            users_updated = db.query(User).filter(
+                User.copro_id == copro_id,
+                User.email != "admin@admin.com"  # Garder l'admin
+            ).update({"building_id": None, "copro_id": None}, synchronize_session=False)
+            if users_updated > 0:
+                print(f"  ✅ Détaché {users_updated} utilisateurs de la copropriété")
+            
+            # 5. Supprimer les équipements (ServiceInstance)
+            equipments_count = db.query(ServiceInstance).filter(ServiceInstance.copro_id == copro_id).count()
+            db.query(ServiceInstance).filter(ServiceInstance.copro_id == copro_id).delete()
+            if equipments_count > 0:
+                print(f"  ✅ Supprimé {equipments_count} équipements")
+            
+            # 6. Supprimer les types de services
+            service_types_count = db.query(ServiceType).filter(ServiceType.copro_id == copro_id).count()
+            db.query(ServiceType).filter(ServiceType.copro_id == copro_id).delete()
+            if service_types_count > 0:
+                print(f"  ✅ Supprimé {service_types_count} types de services")
+            
+            # 7. Supprimer les bâtiments
+            buildings_count = db.query(Building).filter(Building.copro_id == copro_id).count()
+            db.query(Building).filter(Building.copro_id == copro_id).delete()
+            if buildings_count > 0:
+                print(f"  ✅ Supprimé {buildings_count} bâtiments")
+            
+            # 8. Supprimer la copropriété
             db.delete(existing_copro)
             db.commit()
-            print("✅ Données existantes supprimées")
+            print("✅ Toutes les données existantes ont été supprimées")
         
         # 3. Créer la copropriété
         copro = Copro(
@@ -200,11 +240,13 @@ def init_test_data():
         
         for eq_data in common_equipments:
             service_type = service_types[eq_data["type"]]
+            # Ajouter l'identifier au nom pour garantir l'unicité en base
+            db_name = f"{eq_data['name']} ({eq_data['identifier']})"
             equipment = ServiceInstance(
                 copro_id=copro.id,
                 building_id=building_common.id,
                 service_type_id=service_type.id,
-                name=eq_data["name"],
+                name=db_name,
                 identifier=eq_data["identifier"],
                 description=f"{eq_data['type']} - Équipement commun",
                 status="operational",
