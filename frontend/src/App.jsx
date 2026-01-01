@@ -396,7 +396,7 @@ function AppContent() {
       <nav>
           <div className="nav-left">
             <Link to="/status">Statut de la copropriété</Link>
-            <Link to="/report">Déclarer un incident</Link>
+            <Link to="/report">Nouvelle demande ou incident</Link>
             <Link to="/expenses">Suivi des dépenses</Link>
             {isLoggedIn && isAdmin && <Link to="/admin">Administration</Link>}
           </div>

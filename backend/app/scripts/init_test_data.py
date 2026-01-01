@@ -12,8 +12,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.db import SessionLocal, engine, Base
 from app.models.copro import Copro, Building, ServiceInstance
 from app.models.user import User
-from app.models.ticket import Ticket
+from app.models.ticket import Ticket, TicketStatus, TicketType
+from app.models.ticket_comment import TicketComment
 from app.models.status import Incident, IncidentUpdate, IncidentComment
+from app.models.maintenance import Maintenance
+from sqlalchemy import text
 import bcrypt
 
 
@@ -69,20 +72,56 @@ def init_test_data():
             incidents = db.query(Incident).filter(Incident.copro_id == copro_id).all()
             incident_ids = [inc.id for inc in incidents]
             if incident_ids:
+                comments_count = db.query(IncidentComment).filter(IncidentComment.incident_id.in_(incident_ids)).count()
+                updates_count = db.query(IncidentUpdate).filter(IncidentUpdate.incident_id.in_(incident_ids)).count()
                 db.query(IncidentComment).filter(IncidentComment.incident_id.in_(incident_ids)).delete()
                 db.query(IncidentUpdate).filter(IncidentUpdate.incident_id.in_(incident_ids)).delete()
-                print(f"  ✅ Supprimé {len(incident_ids)} incidents et leurs commentaires/mises à jour")
+                if comments_count > 0 or updates_count > 0:
+                    print(f"  ✅ Supprimé {comments_count} commentaires et {updates_count} mises à jour d'incidents")
             
-            # 2. Supprimer les incidents
+            # 2. Mettre à NULL les références incident_id dans les tickets avant de supprimer les incidents
+            tickets_updated = db.query(Ticket).filter(
+                Ticket.copro_id == copro_id,
+                Ticket.incident_id.isnot(None)
+            ).update({"incident_id": None}, synchronize_session=False)
+            if tickets_updated > 0:
+                print(f"  ✅ Détaché {tickets_updated} tickets de leurs incidents")
+            
+            # 3. Supprimer les incidents
+            incidents_count = db.query(Incident).filter(Incident.copro_id == copro_id).count()
             db.query(Incident).filter(Incident.copro_id == copro_id).delete()
+            if incidents_count > 0:
+                print(f"  ✅ Supprimé {incidents_count} incidents")
             
-            # 3. Supprimer les tickets
-            tickets_count = db.query(Ticket).filter(Ticket.copro_id == copro_id).count()
-            db.query(Ticket).filter(Ticket.copro_id == copro_id).delete()
+            # 4. Supprimer les commentaires de tickets (via SQL pour éviter les problèmes d'enum)
+            ticket_ids_result = db.execute(text("""
+                SELECT id FROM tickets WHERE copro_id = :copro_id
+            """), {"copro_id": copro_id})
+            ticket_ids = [row[0] for row in ticket_ids_result.fetchall()]
+            if ticket_ids:
+                ticket_comments_count = db.query(TicketComment).filter(TicketComment.ticket_id.in_(ticket_ids)).count()
+                db.query(TicketComment).filter(TicketComment.ticket_id.in_(ticket_ids)).delete()
+                if ticket_comments_count > 0:
+                    print(f"  ✅ Supprimé {ticket_comments_count} commentaires de tickets")
+            
+            # 5. Supprimer les tickets (via SQL pour éviter les problèmes d'enum)
+            tickets_count = db.execute(text("""
+                SELECT COUNT(*) FROM tickets WHERE copro_id = :copro_id
+            """), {"copro_id": copro_id}).scalar()
+            db.execute(text("""
+                DELETE FROM tickets WHERE copro_id = :copro_id
+            """), {"copro_id": copro_id})
+            db.commit()
             if tickets_count > 0:
                 print(f"  ✅ Supprimé {tickets_count} tickets")
             
-            # 4. Mettre à NULL les références aux bâtiments dans les utilisateurs (sauf admin)
+            # 6. Supprimer les maintenances (après les tickets car elles peuvent référencer des équipements)
+            maintenances_count = db.query(Maintenance).filter(Maintenance.copro_id == copro_id).count()
+            db.query(Maintenance).filter(Maintenance.copro_id == copro_id).delete()
+            if maintenances_count > 0:
+                print(f"  ✅ Supprimé {maintenances_count} maintenances")
+            
+            # 7. Mettre à NULL les références aux bâtiments dans les utilisateurs (sauf admin)
             users_updated = db.query(User).filter(
                 User.copro_id == copro_id,
                 User.email != "admin@admin.com"  # Garder l'admin
@@ -90,19 +129,19 @@ def init_test_data():
             if users_updated > 0:
                 print(f"  ✅ Détaché {users_updated} utilisateurs de la copropriété")
             
-            # 5. Supprimer les équipements (ServiceInstance)
+            # 8. Supprimer les équipements (ServiceInstance) - après les maintenances
             equipments_count = db.query(ServiceInstance).filter(ServiceInstance.copro_id == copro_id).count()
             db.query(ServiceInstance).filter(ServiceInstance.copro_id == copro_id).delete()
             if equipments_count > 0:
                 print(f"  ✅ Supprimé {equipments_count} équipements")
             
-            # 6. Supprimer les bâtiments
+            # 9. Supprimer les bâtiments
             buildings_count = db.query(Building).filter(Building.copro_id == copro_id).count()
             db.query(Building).filter(Building.copro_id == copro_id).delete()
             if buildings_count > 0:
                 print(f"  ✅ Supprimé {buildings_count} bâtiments")
             
-            # 8. Supprimer la copropriété
+            # 10. Supprimer la copropriété
             db.delete(existing_copro)
             db.commit()
             print("✅ Toutes les données existantes ont été supprimées")

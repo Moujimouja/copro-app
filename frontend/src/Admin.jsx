@@ -42,7 +42,9 @@ function Admin() {
   const [selectedTicket, setSelectedTicket] = useState(null)
   const [selectedIncident, setSelectedIncident] = useState(null)
   const [showCommentForm, setShowCommentForm] = useState(false)
+  const [showTicketCommentForm, setShowTicketCommentForm] = useState(null) // ID du ticket pour lequel on ajoute un commentaire
   const [newComment, setNewComment] = useState('')
+  const [newTicketComment, setNewTicketComment] = useState('')
   const [showIncidentForm, setShowIncidentForm] = useState(false)
   const [selectedEquipmentForIncident, setSelectedEquipmentForIncident] = useState(null)
   const [incidentFormData, setIncidentFormData] = useState({
@@ -472,7 +474,34 @@ function Admin() {
     }
   }
 
-  const reviewTicket = async (ticketId, status, createIncident, notes) => {
+  const updateTicketStatus = async (ticketId, newStatus) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${API_URL}/api/v1/admin/tickets/${ticketId}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status: newStatus })
+        }
+      )
+      if (response.ok) {
+        toast.success('Statut mis à jour')
+        loadTickets()
+      } else {
+        const error = await response.json()
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de la mise à jour du statut'}`)
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour statut:', error)
+      toast.error('Erreur lors de la mise à jour du statut')
+    }
+  }
+
+  const reviewTicket = async (ticketId, createIncident) => {
     try {
       const token = localStorage.getItem('token')
       const response = await fetch(
@@ -484,9 +513,9 @@ function Admin() {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            status,
+            status: 'approved',
             create_incident: createIncident,
-            admin_notes: notes
+            admin_notes: null
           })
         }
       )
@@ -503,6 +532,33 @@ function Admin() {
     } catch (error) {
       console.error('Erreur traitement ticket:', error)
       toast.error('Erreur lors du traitement du ticket')
+    }
+  }
+
+  const addTicketComment = async (ticketId, comment) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${API_URL}/api/v1/admin/tickets/${ticketId}/comments`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ comment })
+        }
+      )
+      if (response.ok) {
+        toast.success('Commentaire ajouté')
+        loadTickets()
+      } else {
+        const error = await response.json()
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de l\'ajout du commentaire'}`)
+      }
+    } catch (error) {
+      console.error('Erreur ajout commentaire:', error)
+      toast.error('Erreur lors de l\'ajout du commentaire')
     }
   }
 
@@ -1762,14 +1818,24 @@ function Admin() {
             {tickets.map(ticket => (
               <div key={ticket.id} className={`ticket-card ticket-${ticket.status}`}>
                 <div className="ticket-header">
-                  <h3>{ticket.title}</h3>
-                  <span className={`ticket-status ticket-${ticket.status}`}>
-                    {ticket.status === 'pending' && 'En attente'}
-                    {ticket.status === 'reviewing' && 'En analyse'}
-                    {ticket.status === 'approved' && 'Approuvé'}
-                    {ticket.status === 'rejected' && 'Rejeté'}
-                    {ticket.status === 'resolved' && 'Résolu'}
-                  </span>
+                  <div>
+                    <h3>{ticket.title}</h3>
+                    <span className="ticket-type">
+                      {ticket.type === 'incident' ? '🔴 Incident' : '🔵 Demande'}
+                    </span>
+                  </div>
+                  <select
+                    value={ticket.status}
+                    onChange={(e) => {
+                      updateTicketStatus(ticket.id, e.target.value)
+                    }}
+                    className={`ticket-status-select ticket-status-${ticket.status}`}
+                  >
+                    <option value="analyzing">En cours d'analyse</option>
+                    <option value="in_progress">En cours de traitement</option>
+                    <option value="resolved">Résolu</option>
+                    <option value="closed">Clos</option>
+                  </select>
                 </div>
                 <div className="ticket-body">
                   <p><strong>Description:</strong> {ticket.description}</p>
@@ -1779,13 +1845,67 @@ function Admin() {
                   {ticket.location && <p><strong>Localisation:</strong> {ticket.location}</p>}
                   {ticket.service_instance && <p><strong>Équipement:</strong> {ticket.service_instance}</p>}
                   {ticket.assigned_admin && <p><strong>Assigné à:</strong> {ticket.assigned_admin}</p>}
-                  {ticket.admin_notes && <p><strong>Notes admin:</strong> {ticket.admin_notes}</p>}
                   {ticket.incident_id && <p><strong>Incident créé:</strong> #{ticket.incident_id}</p>}
                   <p><strong>Date:</strong> {new Date(ticket.created_at).toLocaleString('fr-FR')}</p>
                   {ticket.reviewed_at && <p><strong>Traité le:</strong> {new Date(ticket.reviewed_at).toLocaleString('fr-FR')}</p>}
+                  
+                  {/* Commentaires */}
+                  {ticket.comments && ticket.comments.length > 0 && (
+                    <div className="ticket-comments">
+                      <h4>Commentaires ({ticket.comments.length})</h4>
+                      {ticket.comments.map(comment => (
+                        <div key={comment.id} className="ticket-comment">
+                          <p><strong>{comment.admin_email}</strong> - {new Date(comment.created_at).toLocaleString('fr-FR')}</p>
+                          <p>{comment.comment}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Formulaire d'ajout de commentaire */}
+                  {showTicketCommentForm === ticket.id ? (
+                    <div className="ticket-comment-form">
+                      <textarea
+                        value={newTicketComment}
+                        onChange={(e) => setNewTicketComment(e.target.value)}
+                        placeholder="Ajouter un commentaire..."
+                        rows="3"
+                      />
+                      <div className="comment-form-actions">
+                        <button
+                          onClick={() => {
+                            if (newTicketComment.trim()) {
+                              addTicketComment(ticket.id, newTicketComment)
+                              setNewTicketComment('')
+                            }
+                            setShowTicketCommentForm(null)
+                          }}
+                          className="btn-submit"
+                        >
+                          Ajouter
+                        </button>
+                        <button
+                          onClick={() => {
+                            setNewTicketComment('')
+                            setShowTicketCommentForm(null)
+                          }}
+                          className="btn-cancel"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowTicketCommentForm(ticket.id)}
+                      className="btn-add-comment"
+                    >
+                      Ajouter un commentaire
+                    </button>
+                  )}
                 </div>
                 <div className="ticket-actions">
-                  {ticket.status === 'pending' && (
+                  {!ticket.incident_id && (
                     <>
                       <select
                         onChange={(e) => {
@@ -1802,44 +1922,10 @@ function Admin() {
                         ))}
                       </select>
                       <button
-                        onClick={() => {
-                          const notes = window.prompt('Notes (optionnel):') || ''
-                          reviewTicket(ticket.id, 'approved', true, notes)
-                        }}
+                        onClick={() => reviewTicket(ticket.id, true)}
                         className="btn-approve"
                       >
-                        Approuver et créer incident
-                      </button>
-                      <button
-                        onClick={() => {
-                          const notes = window.prompt('Raison du rejet:') || ''
-                          rejectTicket(ticket.id, notes)
-                        }}
-                        className="btn-reject"
-                      >
-                        Rejeter
-                      </button>
-                    </>
-                  )}
-                  {(ticket.status === 'reviewing' || ticket.status === 'approved') && (
-                    <>
-                      <button
-                        onClick={() => {
-                          const notes = window.prompt('Notes (optionnel):') || ''
-                          reviewTicket(ticket.id, 'approved', true, notes)
-                        }}
-                        className="btn-approve"
-                      >
-                        Approuver et créer incident
-                      </button>
-                      <button
-                        onClick={() => {
-                          const notes = window.prompt('Raison du rejet:') || ''
-                          rejectTicket(ticket.id, notes)
-                        }}
-                        className="btn-reject"
-                      >
-                        Rejeter
+                        Créer un incident
                       </button>
                     </>
                   )}
