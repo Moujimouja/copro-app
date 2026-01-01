@@ -19,6 +19,12 @@ function Admin() {
   const [selectedIncident, setSelectedIncident] = useState(null)
   const [showCommentForm, setShowCommentForm] = useState(false)
   const [newComment, setNewComment] = useState('')
+  const [showIncidentForm, setShowIncidentForm] = useState(false)
+  const [selectedEquipmentForIncident, setSelectedEquipmentForIncident] = useState(null)
+  const [incidentFormData, setIncidentFormData] = useState({
+    title: '',
+    message: ''
+  })
   const [showCoproForm, setShowCoproForm] = useState(false)
   const [editingCopro, setEditingCopro] = useState(null)
   const [coproFormData, setCoproFormData] = useState({
@@ -298,6 +304,59 @@ function Admin() {
     } catch (error) {
       console.error('Erreur mise à jour statut:', error)
       toast.error('Erreur lors de la mise à jour du statut')
+    }
+  }
+
+  const openIncidentForm = (equipment) => {
+    setSelectedEquipmentForIncident(equipment)
+    setIncidentFormData({
+      title: '',
+      message: ''
+    })
+    setShowIncidentForm(true)
+  }
+
+  const handleIncidentFormChange = (e) => {
+    const { name, value } = e.target
+    setIncidentFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  const handleSubmitIncident = async (e) => {
+    e.preventDefault()
+    if (!selectedEquipmentForIncident) return
+
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${API_URL}/api/v1/admin/incidents`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          service_instance_id: selectedEquipmentForIncident.id,
+          title: incidentFormData.title,
+          message: incidentFormData.message,
+          status: 'investigating'
+        })
+      })
+      if (response.ok) {
+        toast.success('Incident créé avec succès')
+        setShowIncidentForm(false)
+        setSelectedEquipmentForIncident(null)
+        setIncidentFormData({ title: '', message: '' })
+        loadEquipments()
+        loadIncidents()
+      } else {
+        const error = await response.json().catch(() => ({ detail: 'Erreur lors de la création de l\'incident' }))
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de la création de l\'incident'}`)
+      }
+    } catch (error) {
+      console.error('Erreur création incident:', error)
+      toast.error('Erreur lors de la création de l\'incident')
     }
   }
 
@@ -1056,15 +1115,7 @@ function Admin() {
                           🗑️
                         </button>
                         <button
-                          onClick={() => {
-                            const title = window.prompt('Titre de l\'incident:')
-                            if (title) {
-                              const message = window.prompt('Description de l\'incident:')
-                              if (message) {
-                                createIncident(equipment.id, title, message)
-                              }
-                            }
-                          }}
+                          onClick={() => openIncidentForm(equipment)}
                           className="icon-btn icon-btn-incident"
                           title="Créer un incident"
                         >
@@ -1079,6 +1130,60 @@ function Admin() {
           </div>
           {equipments.length === 0 && (
             <p className="no-equipments">Aucun équipement configuré</p>
+          )}
+
+          {showIncidentForm && selectedEquipmentForIncident && (
+            <div className="modal-overlay" onClick={() => setShowIncidentForm(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>Créer un incident</h3>
+                  <button className="btn-close" onClick={() => setShowIncidentForm(false)}>×</button>
+                </div>
+                <form onSubmit={handleSubmitIncident} className="incident-form">
+                  <div className="form-group">
+                    <label>Équipement</label>
+                    <input
+                      type="text"
+                      value={selectedEquipmentForIncident.name}
+                      disabled
+                      className="form-input-disabled"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="incident-title">Titre de l'incident *</label>
+                    <input
+                      type="text"
+                      id="incident-title"
+                      name="title"
+                      value={incidentFormData.title}
+                      onChange={handleIncidentFormChange}
+                      required
+                      placeholder="Ex: Panne de l'ascenseur"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="incident-message">Description *</label>
+                    <textarea
+                      id="incident-message"
+                      name="message"
+                      value={incidentFormData.message}
+                      onChange={handleIncidentFormChange}
+                      required
+                      rows="5"
+                      placeholder="Décrivez le problème en détail..."
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button type="button" onClick={() => setShowIncidentForm(false)} className="btn-cancel">
+                      Annuler
+                    </button>
+                    <button type="submit" className="btn-submit">
+                      Créer l'incident
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           )}
         </div>
       )}

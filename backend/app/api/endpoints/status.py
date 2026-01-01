@@ -68,7 +68,7 @@ class IncidentResponse(BaseModel):
     is_scheduled: bool
     scheduled_for: Optional[datetime]
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
     resolved_at: Optional[datetime]
     updates: List[IncidentUpdateResponse] = []
 
