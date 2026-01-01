@@ -25,14 +25,20 @@ def get_password_hash(password: str) -> str:
 
 def create_admin_if_not_exists(db):
     """Créer un compte admin s'il n'existe pas"""
-    existing_admin = db.query(User).filter(User.username == "admin").first()
+    existing_admin = db.query(User).filter(User.email == "admin@admin.com").first()
     if existing_admin:
         print("ℹ️  Compte admin existe déjà")
+        # S'assurer que le compte est actif et admin
+        existing_admin.is_superuser = True
+        existing_admin.is_active = True
+        if not existing_admin.username:
+            existing_admin.username = "admin"
+        db.commit()
         return existing_admin
     
     admin = User(
-        username="admin",
-        email="admin@copro.local",
+        username="admin",  # Généré pour compatibilité
+        email="admin@admin.com",
         hashed_password=get_password_hash("admin123"),
         is_superuser=True,
         is_active=True
@@ -40,7 +46,7 @@ def create_admin_if_not_exists(db):
     db.add(admin)
     db.commit()
     db.refresh(admin)
-    print("✅ Compte admin créé (username: admin, password: admin123)")
+    print("✅ Compte admin créé (email: admin@admin.com, password: admin123)")
     return admin
 
 
@@ -52,18 +58,13 @@ def init_test_data():
         # 1. Créer le compte admin si nécessaire
         create_admin_if_not_exists(db)
         
-        # 2. Vérifier si une copropriété existe déjà
+        # 2. Vérifier si une copropriété existe déjà et la supprimer pour réinitialiser
         existing_copro = db.query(Copro).filter(Copro.is_active == True).first()
         if existing_copro:
-            # Vérifier si c'est déjà la copropriété de test
-            if existing_copro.name == "Copropriété de Test":
-                print("ℹ️  Les données de test existent déjà. Utilisation des données existantes.")
-                print(f"   Copropriété: {existing_copro.name} (ID: {existing_copro.id})")
-                total_equipments = db.query(ServiceInstance).filter(ServiceInstance.copro_id == existing_copro.id).count()
-                print(f"   Équipements: {total_equipments}")
-                return
-            
-            print("⚠️  Une copropriété existe déjà. Suppression des données existantes...")
+            print("⚠️  Une copropriété existe déjà. Suppression des données existantes pour réinitialisation...")
+            # Mettre à NULL les références aux bâtiments dans les utilisateurs
+            from app.models.user import User
+            db.query(User).filter(User.copro_id == existing_copro.id).update({"building_id": None})
             # Supprimer les équipements
             db.query(ServiceInstance).filter(ServiceInstance.copro_id == existing_copro.id).delete()
             # Supprimer les types de services
@@ -155,11 +156,12 @@ def init_test_data():
                 service_type = service_types[eq_config["type"]]
                 for i in range(eq_config["count"]):
                     if eq_config["count"] > 1:
-                        name = f"{eq_config['type']} {i+1} - Bâtiment {building_id}"
+                        # Utiliser l'identifier pour rendre le nom unique dans la DB, mais l'affichage utilisera juste le type
                         identifier = f"{eq_config['prefix']}-{building_id}-{i+1:02d}"
+                        name = f"{eq_config['type']} {i+1} ({identifier})"
                     else:
-                        name = f"{eq_config['type']} - Bâtiment {building_id}"
                         identifier = f"{eq_config['prefix']}-{building_id}"
+                        name = f"{eq_config['type']} ({identifier})"
                     
                     equipment = ServiceInstance(
                         copro_id=copro.id,
@@ -167,14 +169,16 @@ def init_test_data():
                         service_type_id=service_type.id,
                         name=name,
                         identifier=identifier,
-                        description=f"{eq_config['type']} du bâtiment {building_id}",
+                        description=f"{eq_config['type']}",
                         status="operational",
                         order=order_counter,
                         is_active=True
                     )
                     db.add(equipment)
                     order_counter += 1
-                    print(f"  ✅ {name} ({identifier})")
+                    # Afficher sans l'identifier pour la lisibilité
+                    display_name = f"{eq_config['type']} {i+1}" if eq_config["count"] > 1 else f"{eq_config['type']}"
+                    print(f"  ✅ {display_name} ({identifier})")
         
         # 7. Créer un bâtiment "Commun" pour les équipements partagés
         building_common = Building(
@@ -227,7 +231,7 @@ def init_test_data():
         print(f"Équipements: {total_equipments}")
         print("="*60)
         print("\n📝 Compte admin:")
-        print("   Username: admin")
+        print("   Email: admin@admin.com")
         print("   Password: admin123")
         print("="*60)
         

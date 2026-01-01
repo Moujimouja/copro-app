@@ -8,7 +8,8 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 from app.db import get_db
 from app.models.ticket import Ticket, TicketStatus
-from app.models.copro import Copro, ServiceInstance
+from app.models.copro import Copro, ServiceInstance, Building
+from typing import List
 
 router = APIRouter()
 
@@ -88,6 +89,30 @@ async def get_public_service_instances(db: Session = Depends(get_db)):
             "building": instance.building.identifier if instance.building else "",
             "service_type": instance.service_type.name if instance.service_type else "",
             "status": instance.status
+        })
+    
+    return result
+
+
+@router.get("/buildings")
+async def get_public_buildings(db: Session = Depends(get_db)):
+    """Obtenir la liste des bâtiments (public, pour le formulaire d'inscription) - Une seule copropriété"""
+    # Récupérer la première (et seule) copropriété
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        return []
+    
+    buildings = db.query(Building).filter(
+        Building.copro_id == copro.id,
+        Building.is_active == True
+    ).order_by(Building.order, Building.identifier).all()
+    
+    result = []
+    for building in buildings:
+        result.append({
+            "id": building.id,
+            "identifier": building.identifier,
+            "name": building.name
         })
     
     return result

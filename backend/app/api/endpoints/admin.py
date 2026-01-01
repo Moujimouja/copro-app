@@ -15,7 +15,7 @@ from app.models.copro import Copro, Building, ServiceType, ServiceInstance
 from app.models.status import Incident, IncidentUpdate, IncidentComment, IncidentStatus
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
-from app.auth import get_current_user
+from app.auth import get_current_user, get_password_hash
 
 router = APIRouter()
 
@@ -1111,4 +1111,282 @@ async def reject_ticket(
     db.refresh(ticket)
     
     return {"message": "Ticket rejeté", "ticket_id": ticket.id}
+
+
+# ============ Gestion des Utilisateurs ============
+
+class UserCreate(BaseModel):
+    username: str
+    email: str
+    password: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    lot_number: Optional[str] = None
+    floor: Optional[str] = None
+    building_id: Optional[int] = None
+    is_active: bool = True
+    is_superuser: bool = False
+
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    lot_number: Optional[str] = None
+    floor: Optional[str] = None
+    building_id: Optional[int] = None
+    is_active: Optional[bool] = None
+    is_superuser: Optional[bool] = None
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    lot_number: Optional[str] = None
+    floor: Optional[str] = None
+    building_id: Optional[int] = None
+    building_name: Optional[str] = None
+    building_identifier: Optional[str] = None
+    is_active: bool
+    is_superuser: bool
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/users", response_model=List[UserResponse])
+async def list_users(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Lister tous les utilisateurs (admin uniquement)"""
+    users = db.query(User).all()
+    result = []
+    for user in users:
+        user_dict = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "lot_number": user.lot_number,
+            "floor": user.floor,
+            "building_id": user.building_id,
+            "building_name": None,
+            "building_identifier": None,
+            "is_active": user.is_active,
+            "is_superuser": user.is_superuser,
+            "created_at": user.created_at
+        }
+        if user.building:
+            user_dict["building_name"] = user.building.name
+            user_dict["building_identifier"] = user.building.identifier
+        result.append(user_dict)
+    return result
+
+
+@router.get("/users/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Récupérer un utilisateur par ID (admin uniquement)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    user_dict = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "lot_number": user.lot_number,
+        "floor": user.floor,
+        "building_id": user.building_id,
+        "building_name": None,
+        "building_identifier": None,
+        "is_active": user.is_active,
+        "is_superuser": user.is_superuser,
+        "created_at": user.created_at
+    }
+    if user.building:
+        user_dict["building_name"] = user.building.name
+        user_dict["building_identifier"] = user.building.identifier
+    return user_dict
+
+
+@router.post("/users", response_model=UserResponse)
+async def create_user(
+    user_data: UserCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Créer un nouvel utilisateur (admin uniquement)"""
+    # Vérifier que l'username n'existe pas déjà
+    existing_user = db.query(User).filter(User.username == user_data.username).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Ce nom d'utilisateur existe déjà")
+    
+    # Vérifier que l'email n'existe pas déjà
+    existing_email = db.query(User).filter(User.email == user_data.email).first()
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Cet email existe déjà")
+    
+    # Vérifier le bâtiment si fourni
+    if user_data.building_id:
+        building = db.query(Building).filter(Building.id == user_data.building_id).first()
+        if not building:
+            raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
+    
+    # Récupérer la copropriété active
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        raise HTTPException(status_code=404, detail="Aucune copropriété configurée")
+    
+    # Créer l'utilisateur
+    hashed_password = get_password_hash(user_data.password)
+    new_user = User(
+        username=user_data.username,
+        email=user_data.email,
+        hashed_password=hashed_password,
+        first_name=user_data.first_name,
+        last_name=user_data.last_name,
+        lot_number=user_data.lot_number,
+        floor=user_data.floor,
+        building_id=user_data.building_id,
+        copro_id=copro.id,
+        is_active=user_data.is_active,
+        is_superuser=user_data.is_superuser
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    user_dict = {
+        "id": new_user.id,
+        "username": new_user.username,
+        "email": new_user.email,
+        "first_name": new_user.first_name,
+        "last_name": new_user.last_name,
+        "lot_number": new_user.lot_number,
+        "floor": new_user.floor,
+        "building_id": new_user.building_id,
+        "building_name": None,
+        "building_identifier": None,
+        "is_active": new_user.is_active,
+        "is_superuser": new_user.is_superuser,
+        "created_at": new_user.created_at
+    }
+    if new_user.building:
+        user_dict["building_name"] = new_user.building.name
+        user_dict["building_identifier"] = new_user.building.identifier
+    
+    return user_dict
+
+
+@router.put("/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: int,
+    user_data: UserUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Mettre à jour un utilisateur (admin uniquement)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    # Vérifier que l'username n'existe pas déjà (si modifié)
+    if user_data.username and user_data.username != user.username:
+        existing_user = db.query(User).filter(User.username == user_data.username).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Ce nom d'utilisateur existe déjà")
+        user.username = user_data.username
+    
+    # Vérifier que l'email n'existe pas déjà (si modifié)
+    if user_data.email and user_data.email != user.email:
+        existing_email = db.query(User).filter(User.email == user_data.email).first()
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Cet email existe déjà")
+        user.email = user_data.email
+    
+    # Mettre à jour le mot de passe si fourni
+    if user_data.password:
+        user.hashed_password = get_password_hash(user_data.password)
+    
+    # Vérifier le bâtiment si fourni
+    if user_data.building_id is not None:
+        if user_data.building_id:
+            building = db.query(Building).filter(Building.id == user_data.building_id).first()
+            if not building:
+                raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
+        user.building_id = user_data.building_id
+    
+    # Mettre à jour les autres champs
+    if user_data.first_name is not None:
+        user.first_name = user_data.first_name
+    if user_data.last_name is not None:
+        user.last_name = user_data.last_name
+    if user_data.lot_number is not None:
+        user.lot_number = user_data.lot_number
+    if user_data.floor is not None:
+        user.floor = user_data.floor
+    if user_data.is_active is not None:
+        user.is_active = user_data.is_active
+    if user_data.is_superuser is not None:
+        user.is_superuser = user_data.is_superuser
+    
+    db.commit()
+    db.refresh(user)
+    
+    user_dict = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "lot_number": user.lot_number,
+        "floor": user.floor,
+        "building_id": user.building_id,
+        "building_name": None,
+        "building_identifier": None,
+        "is_active": user.is_active,
+        "is_superuser": user.is_superuser,
+        "created_at": user.created_at
+    }
+    if user.building:
+        user_dict["building_name"] = user.building.name
+        user_dict["building_identifier"] = user.building.identifier
+    
+    return user_dict
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Supprimer un utilisateur (admin uniquement)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    # Empêcher la suppression de soi-même
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="Vous ne pouvez pas supprimer votre propre compte")
+    
+    db.delete(user)
+    db.commit()
+    
+    return {"message": "Utilisateur supprimé"}
 

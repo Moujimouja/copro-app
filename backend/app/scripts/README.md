@@ -8,7 +8,7 @@ Script d'initialisation des données de test pour l'application.
 
 **Ce qui est créé :**
 - 1 copropriété de test ("Copropriété de Test")
-- 1 compte administrateur (username: `admin`, password: `admin123`)
+- 1 compte administrateur (email: `admin@admin.com`, password: `admin123`)
 - 2 bâtiments (A et B)
 - 9 types de services :
   - Ascenseur
@@ -46,5 +46,5 @@ Script pour créer un compte administrateur.
 docker compose exec backend python -m app.scripts.create_admin
 ```
 
-**Note :** Si un compte admin existe déjà, le mot de passe sera réinitialisé à `admin123`.
+**Note :** Si un compte admin existe déjà avec l'email `admin@admin.com`, le mot de passe sera réinitialisé à `admin123`.
 

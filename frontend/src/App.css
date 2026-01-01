@@ -118,6 +118,10 @@ main {
 .login {
   max-width: 600px;
   margin: 0 auto;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
 }
 
 .home h1 {
@@ -125,48 +129,174 @@ main {
   margin-bottom: 1rem;
 }
 
+.login-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.login-tabs button {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #9ca3af;
+  font-size: 1rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: -2px;
+  position: relative;
+}
+
+.login-tabs button:hover {
+  color: #6b7280;
+  background: #f9fafb;
+}
+
+.login-tabs button.active {
+  color: #3498db;
+  font-weight: 600;
+  border-bottom-color: #3498db;
+  background: #f0f9ff;
+}
+
+.login-tabs button.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #3498db;
+  border-radius: 2px 2px 0 0;
+}
+
+.login-form-container,
+.register-form-container {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .login h2 {
   color: #2c3e50;
   margin-bottom: 1.5rem;
 }
 
-.login form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+.register-info {
+  background: #f0f9ff;
+  border-left: 4px solid #3498db;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  color: #1e40af;
+  font-size: 0.875rem;
+  border-radius: 4px;
 }
 
-.login form div {
+.login form,
+.register-form-container form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.login form div,
+.register-form-container form .form-group {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.login label {
+.login label,
+.register-form-container label {
   font-weight: 500;
   color: #34495e;
+  font-size: 0.875rem;
 }
 
-.login input {
+.login input,
+.register-form-container input,
+.register-form-container select {
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 1rem;
+  transition: border-color 0.3s;
 }
 
-.login button {
+.login input:focus,
+.register-form-container input:focus,
+.register-form-container select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.login button,
+.register-form-container .btn-submit {
   padding: 0.75rem 1.5rem;
   background-color: #3498db;
   color: white;
   border: none;
   border-radius: 4px;
   font-size: 1rem;
+  font-weight: 500;
   cursor: pointer;
   transition: background-color 0.3s;
+  margin-top: 0.5rem;
 }
 
-.login button:hover {
+.login button:hover,
+.register-form-container .btn-submit:hover {
   background-color: #2980b9;
+}
+
+.form-message {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.form-message {
+  background: #f0f9ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+@media (max-width: 768px) {
+  .login {
+    padding: 1.5rem;
+  }
+
+  .login-tabs {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .login-tabs button {
+    width: 100%;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+    border-left: 3px solid transparent;
+    margin-bottom: 0;
+  }
+
+  .login-tabs button.active {
+    border-left-color: #3498db;
+    border-bottom-color: #e5e7eb;
+  }
 }
 
 pre {

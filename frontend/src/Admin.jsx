@@ -15,6 +15,21 @@ function Admin() {
   const [copro, setCopro] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('copro')
+  const [users, setUsers] = useState([])
+  const [showUserForm, setShowUserForm] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
+  const [userFormData, setUserFormData] = useState({
+    username: '',
+    email: '',
+    password: '',
+    first_name: '',
+    last_name: '',
+    lot_number: '',
+    floor: '',
+    building_id: null,
+    is_active: true,
+    is_superuser: false
+  })
   const [selectedTicket, setSelectedTicket] = useState(null)
   const [selectedIncident, setSelectedIncident] = useState(null)
   const [showCommentForm, setShowCommentForm] = useState(false)
@@ -205,37 +220,6 @@ function Admin() {
     }
   }, [])
 
-  // useEffect après toutes les déclarations de fonctions
-  useEffect(() => {
-    // Vérifier l'authentification
-    const token = localStorage.getItem('token')
-    console.log('Admin useEffect - Token présent:', !!token)
-    if (!token) {
-      console.log('Pas de token, redirection vers login')
-      navigate('/login')
-      return
-    }
-
-    console.log('Chargement des données pour onglet:', activeTab)
-    // Ne charger les données que si on a un token valide
-    // Les fonctions de chargement gèrent elles-mêmes les erreurs 401
-    if (activeTab === 'copro') {
-      loadCopro()
-    } else if (activeTab === 'equipments') {
-      loadEquipments()
-      loadBuildings()
-      loadServiceTypes()
-    } else if (activeTab === 'buildings') {
-      loadBuildings()
-    } else if (activeTab === 'tickets') {
-      loadTickets()
-      loadAdmins()
-    } else if (activeTab === 'incidents') {
-      loadIncidents()
-      loadAdmins()
-    }
-  }, [activeTab, loadEquipments, loadBuildings, loadServiceTypes, loadTickets, loadCopro, navigate])
-
   const loadAdmins = useCallback(async () => {
     try {
       const token = localStorage.getItem('token')
@@ -280,6 +264,66 @@ function Admin() {
       setLoading(false)
     }
   }, [])
+
+  const loadUsers = useCallback(async () => {
+    try {
+      setLoading(true)
+      const token = localStorage.getItem('token')
+      if (!token) {
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/v1/admin/users`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setUsers(data)
+      } else if (response.status === 401) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+        return
+      }
+    } catch (error) {
+      console.error('Erreur chargement utilisateurs:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // useEffect après toutes les déclarations de fonctions
+  useEffect(() => {
+    // Vérifier l'authentification
+    const token = localStorage.getItem('token')
+    console.log('Admin useEffect - Token présent:', !!token)
+    if (!token) {
+      console.log('Pas de token, redirection vers login')
+      navigate('/login')
+      return
+    }
+
+    console.log('Chargement des données pour onglet:', activeTab)
+    // Ne charger les données que si on a un token valide
+    // Les fonctions de chargement gèrent elles-mêmes les erreurs 401
+    if (activeTab === 'copro') {
+      loadCopro()
+    } else if (activeTab === 'equipments') {
+      loadEquipments()
+      loadBuildings()
+      loadServiceTypes()
+    } else if (activeTab === 'buildings') {
+      loadBuildings()
+    } else if (activeTab === 'tickets') {
+      loadTickets()
+      loadAdmins()
+    } else if (activeTab === 'incidents') {
+      loadIncidents()
+      loadAdmins()
+    } else if (activeTab === 'users') {
+      loadUsers()
+      loadBuildings()
+    }
+  }, [activeTab, loadEquipments, loadBuildings, loadServiceTypes, loadTickets, loadCopro, loadIncidents, loadUsers, loadAdmins, navigate])
 
   const updateEquipmentStatus = async (equipmentId, newStatus) => {
     try {
@@ -579,7 +623,7 @@ function Admin() {
   const openCreateForm = () => {
     setEditingEquipment(null)
     setFormData({
-      building_id: '',
+      building_id: null,
       service_type_id: '',
       name: '',
       identifier: '',
@@ -884,6 +928,144 @@ function Admin() {
     }
   }
 
+  // ============ Gestion des Utilisateurs ============
+
+  const openCreateUserForm = () => {
+    setEditingUser(null)
+    setUserFormData({
+      username: '',
+      email: '',
+      password: '',
+      first_name: '',
+      last_name: '',
+      lot_number: '',
+      floor: '',
+      building_id: null,
+      is_active: true,
+      is_superuser: false
+    })
+    setShowUserForm(true)
+  }
+
+  const openEditUserForm = (user) => {
+    setEditingUser(user)
+    setUserFormData({
+      username: user.username,
+      email: user.email,
+      password: '', // Ne pas pré-remplir le mot de passe
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      lot_number: user.lot_number || '',
+      floor: user.floor || '',
+      building_id: user.building_id || '',
+      is_active: user.is_active,
+      is_superuser: user.is_superuser
+    })
+    setShowUserForm(true)
+  }
+
+  const handleUserFormChange = (e) => {
+    const { name, value, type, checked } = e.target
+    setUserFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : (name === 'building_id' ? (value ? Number(value) : null) : value)
+    }))
+  }
+
+  const handleSubmitUser = async (e) => {
+    e.preventDefault()
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Session expirée. Veuillez vous reconnecter.')
+        navigate('/login')
+        return
+      }
+
+      const url = editingUser
+        ? `${API_URL}/api/v1/admin/users/${editingUser.id}`
+        : `${API_URL}/api/v1/admin/users`
+      
+      const method = editingUser ? 'PUT' : 'POST'
+      
+      // Préparer les données (ne pas envoyer password vide en cas d'édition)
+      const dataToSend = { ...userFormData }
+      
+      // Convertir les chaînes vides en null pour les champs optionnels
+      if (dataToSend.building_id === '' || dataToSend.building_id === null || dataToSend.building_id === undefined) {
+        dataToSend.building_id = null
+      } else if (typeof dataToSend.building_id === 'string') {
+        dataToSend.building_id = Number(dataToSend.building_id) || null
+      }
+      
+      // Convertir les chaînes vides en null pour les autres champs optionnels
+      if (dataToSend.first_name === '') dataToSend.first_name = null
+      if (dataToSend.last_name === '') dataToSend.last_name = null
+      if (dataToSend.lot_number === '') dataToSend.lot_number = null
+      if (dataToSend.floor === '') dataToSend.floor = null
+      
+      // Ne pas envoyer password vide en cas d'édition
+      if (editingUser && !dataToSend.password) {
+        delete dataToSend.password
+      }
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(dataToSend)
+      })
+
+      if (response.ok) {
+        toast.success(editingUser ? 'Utilisateur mis à jour' : 'Utilisateur créé')
+        setShowUserForm(false)
+        loadUsers()
+      } else if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('token')
+        toast.error('Session expirée. Veuillez vous reconnecter.')
+        navigate('/login')
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Erreur lors de la sauvegarde' }))
+        toast.error(`Erreur: ${errorData.detail || 'Erreur lors de la sauvegarde'}`)
+      }
+    } catch (error) {
+      console.error('Erreur sauvegarde utilisateur:', error)
+      toast.error('Erreur de connexion. Vérifiez votre connexion internet.')
+    }
+  }
+
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${API_URL}/api/v1/admin/users/${userId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+
+      if (response.ok) {
+        toast.success('Utilisateur supprimé')
+        loadUsers()
+      } else {
+        const error = await response.json()
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de la suppression'}`)
+      }
+    } catch (error) {
+      console.error('Erreur suppression utilisateur:', error)
+      toast.error('Erreur lors de la suppression')
+    }
+  }
+
   if (loading && equipments.length === 0 && tickets.length === 0) {
     return <div className="admin-loading">Chargement...</div>
   }
@@ -924,6 +1106,12 @@ function Admin() {
           onClick={() => setActiveTab('incidents')}
         >
           Incidents ({incidents.filter(i => i.status !== 'closed').length})
+        </button>
+        <button 
+          className={activeTab === 'users' ? 'active' : ''}
+          onClick={() => setActiveTab('users')}
+        >
+          Utilisateurs
         </button>
       </div>
 
@@ -1662,6 +1850,210 @@ function Admin() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'users' && (
+        <div className="users-section">
+          <div className="section-header">
+            <h2>Gestion des Utilisateurs</h2>
+            <button onClick={openCreateUserForm} className="btn-create">
+              + Créer un utilisateur
+            </button>
+          </div>
+
+          {showUserForm && (
+            <div className="modal-overlay" onClick={() => setShowUserForm(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>{editingUser ? 'Modifier l\'utilisateur' : 'Créer un utilisateur'}</h3>
+                  <button className="btn-close" onClick={() => setShowUserForm(false)}>×</button>
+                </div>
+                <form onSubmit={handleSubmitUser} className="equipment-form">
+                  <div className="form-group">
+                    <label>Nom d'utilisateur *</label>
+                    <input
+                      type="text"
+                      name="username"
+                      value={userFormData.username}
+                      onChange={handleUserFormChange}
+                      required
+                      placeholder="Ex: jdupont"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Email *</label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={userFormData.email}
+                      onChange={handleUserFormChange}
+                      required
+                      placeholder="Ex: jdupont@example.com"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Mot de passe {editingUser ? '(laisser vide pour ne pas modifier)' : '*'}</label>
+                    <input
+                      type="password"
+                      name="password"
+                      value={userFormData.password}
+                      onChange={handleUserFormChange}
+                      required={!editingUser}
+                      placeholder="••••••••"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Prénom</label>
+                    <input
+                      type="text"
+                      name="first_name"
+                      value={userFormData.first_name}
+                      onChange={handleUserFormChange}
+                      placeholder="Ex: Jean"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Nom</label>
+                    <input
+                      type="text"
+                      name="last_name"
+                      value={userFormData.last_name}
+                      onChange={handleUserFormChange}
+                      placeholder="Ex: Dupont"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Numéro de lot</label>
+                    <input
+                      type="text"
+                      name="lot_number"
+                      value={userFormData.lot_number}
+                      onChange={handleUserFormChange}
+                      placeholder="Ex: 12"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Étage</label>
+                    <input
+                      type="text"
+                      name="floor"
+                      value={userFormData.floor}
+                      onChange={handleUserFormChange}
+                      placeholder="Ex: 3"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Bâtiment</label>
+                    <select
+                      name="building_id"
+                      value={userFormData.building_id || ''}
+                      onChange={handleUserFormChange}
+                    >
+                      <option value="">Aucun</option>
+                      {buildings.map(building => (
+                        <option key={building.id} value={building.id}>
+                          {building.identifier} - {building.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="is_active"
+                        checked={userFormData.is_active}
+                        onChange={handleUserFormChange}
+                      />
+                      Actif
+                    </label>
+                  </div>
+                  <div className="form-group">
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="is_superuser"
+                        checked={userFormData.is_superuser}
+                        onChange={handleUserFormChange}
+                      />
+                      Administrateur
+                    </label>
+                  </div>
+                  <div className="form-actions">
+                    <button type="button" onClick={() => setShowUserForm(false)} className="btn-cancel">
+                      Annuler
+                    </button>
+                    <button type="submit" className="btn-submit">
+                      {editingUser ? 'Mettre à jour' : 'Créer'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          <div className="users-table-container">
+            <table className="equipments-table">
+              <thead>
+                <tr>
+                  <th>Nom d'utilisateur</th>
+                  <th>Email</th>
+                  <th>Nom</th>
+                  <th>Prénom</th>
+                  <th>Lot</th>
+                  <th>Étage</th>
+                  <th>Bâtiment</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(user => (
+                  <tr key={user.id} className={`equipment-row ${user.is_active ? 'status-operational' : 'status-maintenance'}`}>
+                    <td className="equipment-name">{user.username}</td>
+                    <td>{user.email}</td>
+                    <td>{user.last_name || '-'}</td>
+                    <td>{user.first_name || '-'}</td>
+                    <td>{user.lot_number || '-'}</td>
+                    <td>{user.floor || '-'}</td>
+                    <td>{user.building_name ? `${user.building_identifier} - ${user.building_name}` : '-'}</td>
+                    <td>
+                      <span className={`status-badge ${user.is_active ? 'status-operational' : 'status-maintenance'}`}>
+                        {user.is_active ? 'Actif' : 'Inactif'}
+                        {user.is_superuser && ' (Admin)'}
+                      </span>
+                    </td>
+                    <td className="equipment-actions-cell">
+                      <div className="action-icons">
+                        <button
+                          onClick={() => openEditUserForm(user)}
+                          className="icon-btn icon-btn-edit"
+                          title="Modifier"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${user.username}" ?`)) {
+                              handleDeleteUser(user.id)
+                            }
+                          }}
+                          className="icon-btn icon-btn-delete"
+                          title="Supprimer"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {users.length === 0 && (
+              <p className="no-equipments">Aucun utilisateur configuré.</p>
+            )}
+          </div>
         </div>
       )}
     </div>

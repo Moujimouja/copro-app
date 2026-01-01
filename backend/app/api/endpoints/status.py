@@ -173,10 +173,19 @@ async def get_status_page(db: Session = Depends(get_db)):
     services_data = []
     for si in service_instances:
         db.refresh(si, ['building', 'service_type'])
+        # Ne pas inclure le bâtiment dans la description car il est déjà affiché dans le titre du groupe
+        default_description = si.service_type.name if si.service_type else None
+        
+        # Nettoyer le nom pour enlever l'identifier entre parenthèses (ex: "Ascenseur 1 (ASC-A-01)" -> "Ascenseur 1")
+        display_name = si.name
+        if '(' in si.name and ')' in si.name:
+            # Extraire la partie avant les parenthèses
+            display_name = si.name.split('(')[0].strip()
+        
         services_data.append(ServiceResponse(
             id=si.id,
-            name=si.name,
-            description=si.description or f"{si.service_type.name if si.service_type else ''} - Bâtiment {si.building.identifier if si.building else ''}",
+            name=display_name,
+            description=si.description or default_description,
             status=si.status,
             order=si.order,
             building_id=si.building_id,
