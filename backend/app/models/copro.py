@@ -28,7 +28,6 @@ class Copro(Base):
     # Relationships
     buildings = relationship("Building", back_populates="copro", cascade="all, delete-orphan")
     users = relationship("User", back_populates="copro")
-    service_types = relationship("ServiceType", back_populates="copro", cascade="all, delete-orphan")
 
 
 class Building(Base):
@@ -58,31 +57,6 @@ class Building(Base):
     )
 
 
-class ServiceType(Base):
-    """Type de service/équipement (template réutilisable)"""
-    __tablename__ = "service_types"
-
-    id = Column(Integer, primary_key=True, index=True)
-    copro_id = Column(Integer, ForeignKey("copros.id"), nullable=False, index=True)
-    name = Column(String, nullable=False)  # "Ascenseur", "Éclairage", "Eau chaude", etc.
-    description = Column(Text, nullable=True)
-    icon = Column(String, nullable=True)  # Nom d'icône ou emoji
-    category = Column(String, nullable=True)  # "Équipement", "Fluide", "Sécurité", etc.
-    
-    # Configuration par défaut
-    default_status = Column(String, default="operational")  # Status par défaut
-    
-    # Métadonnées
-    order = Column(Integer, default=0)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    # Relationships
-    copro = relationship("Copro", back_populates="service_types")
-    service_instances = relationship("ServiceInstance", back_populates="service_type", cascade="all, delete-orphan")
-
-
 class ServiceInstance(Base):
     """Instance réelle d'un service dans un bâtiment"""
     __tablename__ = "service_instances"
@@ -90,10 +64,9 @@ class ServiceInstance(Base):
     id = Column(Integer, primary_key=True, index=True)
     copro_id = Column(Integer, ForeignKey("copros.id"), nullable=False, index=True)
     building_id = Column(Integer, ForeignKey("buildings.id"), nullable=False, index=True)
-    service_type_id = Column(Integer, ForeignKey("service_types.id"), nullable=False, index=True)
     
     # Identification
-    name = Column(String, nullable=False)  # Nom spécifique (ex: "Ascenseur Bâtiment A")
+    name = Column(String, nullable=False)  # Nom de l'équipement/service (ex: "Ascenseur 1", "Éclairage")
     identifier = Column(String, nullable=True)  # Identifiant optionnel (ex: "ASC-A-01")
     description = Column(Text, nullable=True)
     location = Column(String, nullable=True)  # Localisation précise (ex: "Rez-de-chaussée")
@@ -111,7 +84,6 @@ class ServiceInstance(Base):
 
     # Relationships
     building = relationship("Building", back_populates="service_instances")
-    service_type = relationship("ServiceType", back_populates="service_instances")
     incidents = relationship("Incident", back_populates="service_instance", cascade="all, delete-orphan")
 
     # Unique constraint: nom unique par copropriété

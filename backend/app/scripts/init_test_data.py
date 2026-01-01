@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.db import SessionLocal, engine, Base
-from app.models.copro import Copro, Building, ServiceType, ServiceInstance
+from app.models.copro import Copro, Building, ServiceInstance
 from app.models.user import User
 from app.models.ticket import Ticket
 from app.models.status import Incident, IncidentUpdate, IncidentComment
@@ -96,13 +96,7 @@ def init_test_data():
             if equipments_count > 0:
                 print(f"  ✅ Supprimé {equipments_count} équipements")
             
-            # 6. Supprimer les types de services
-            service_types_count = db.query(ServiceType).filter(ServiceType.copro_id == copro_id).count()
-            db.query(ServiceType).filter(ServiceType.copro_id == copro_id).delete()
-            if service_types_count > 0:
-                print(f"  ✅ Supprimé {service_types_count} types de services")
-            
-            # 7. Supprimer les bâtiments
+            # 6. Supprimer les bâtiments
             buildings_count = db.query(Building).filter(Building.copro_id == copro_id).count()
             db.query(Building).filter(Building.copro_id == copro_id).delete()
             if buildings_count > 0:
@@ -126,36 +120,7 @@ def init_test_data():
         db.flush()
         print(f"✅ Copropriété créée: {copro.name} (ID: {copro.id})")
         
-        # 4. Créer les types de services
-        service_types_data = [
-            {"name": "Ascenseur", "description": "Ascenseur de l'immeuble", "category": "Équipement", "order": 1},
-            {"name": "Éclairage", "description": "Éclairage des parties communes", "category": "Équipement", "order": 2},
-            {"name": "Eau chaude", "description": "Production d'eau chaude sanitaire", "category": "Fluide", "order": 3},
-            {"name": "Eau froide", "description": "Distribution d'eau froide", "category": "Fluide", "order": 4},
-            {"name": "Porte parking", "description": "Porte d'accès au parking", "category": "Sécurité", "order": 5},
-            {"name": "Électricité", "description": "Alimentation électrique", "category": "Équipement", "order": 6},
-            {"name": "Porte d'entrée", "description": "Porte d'entrée du bâtiment", "category": "Sécurité", "order": 7},
-            {"name": "Grille voiture", "description": "Grille d'accès voiture", "category": "Sécurité", "order": 8},
-            {"name": "Grille piéton", "description": "Grille d'accès piéton", "category": "Sécurité", "order": 9},
-        ]
-        
-        service_types = {}
-        for st_data in service_types_data:
-            service_type = ServiceType(
-                copro_id=copro.id,
-                name=st_data["name"],
-                description=st_data["description"],
-                category=st_data["category"],
-                default_status="operational",
-                order=st_data["order"],
-                is_active=True
-            )
-            db.add(service_type)
-            db.flush()
-            service_types[st_data["name"]] = service_type
-            print(f"  ✅ Type de service créé: {service_type.name}")
-        
-        # 5. Créer les 2 bâtiments
+        # 4. Créer les 2 bâtiments
         buildings_data = [
             {"name": "Bâtiment A", "description": "Premier bâtiment", "order": 1},
             {"name": "Bâtiment B", "description": "Deuxième bâtiment", "order": 2},
@@ -175,39 +140,37 @@ def init_test_data():
             buildings[b_data["name"]] = building
             print(f"✅ Bâtiment créé: {building.name} (ID: {building.id})")
         
-        # 6. Créer les équipements pour chaque bâtiment
+        # 5. Créer les équipements pour chaque bâtiment
         building_equipments = [
-            {"type": "Ascenseur", "count": 2, "prefix": "ASC"},
-            {"type": "Eau chaude", "count": 1, "prefix": "EC"},
-            {"type": "Eau froide", "count": 1, "prefix": "EF"},
-            {"type": "Électricité", "count": 1, "prefix": "ELEC"},
-            {"type": "Éclairage", "count": 1, "prefix": "LUM"},
-            {"type": "Porte d'entrée", "count": 1, "prefix": "PE"},
+            {"name": "Ascenseur", "count": 2, "prefix": "ASC"},
+            {"name": "Eau chaude", "count": 1, "prefix": "EC"},
+            {"name": "Eau froide", "count": 1, "prefix": "EF"},
+            {"name": "Électricité", "count": 1, "prefix": "ELEC"},
+            {"name": "Éclairage", "count": 1, "prefix": "LUM"},
+            {"name": "Porte d'entrée", "count": 1, "prefix": "PE"},
         ]
         
         order_counter = 1
         for building_name, building in buildings.items():
             print(f"\n📦 Création des équipements pour le bâtiment {building_name}:")
             for eq_config in building_equipments:
-                service_type = service_types[eq_config["type"]]
                 for i in range(eq_config["count"]):
                     if eq_config["count"] > 1:
                         # Utiliser un identifiant basé sur le nom du bâtiment pour rendre le nom unique dans la DB
                         building_short = building_name.replace("Bâtiment ", "").replace(" ", "")
                         identifier = f"{eq_config['prefix']}-{building_short}-{i+1:02d}"
-                        name = f"{eq_config['type']} {i+1} ({identifier})"
+                        name = f"{eq_config['name']} {i+1} ({identifier})"
                     else:
                         building_short = building_name.replace("Bâtiment ", "").replace(" ", "")
                         identifier = f"{eq_config['prefix']}-{building_short}"
-                        name = f"{eq_config['type']} ({identifier})"
+                        name = f"{eq_config['name']} ({identifier})"
                     
                     equipment = ServiceInstance(
                         copro_id=copro.id,
                         building_id=building.id,
-                        service_type_id=service_type.id,
                         name=name,
                         identifier=identifier,
-                        description=f"{eq_config['type']}",
+                        description=None,
                         status="operational",
                         order=order_counter,
                         is_active=True
@@ -215,10 +178,10 @@ def init_test_data():
                     db.add(equipment)
                     order_counter += 1
                     # Afficher sans l'identifier pour la lisibilité
-                    display_name = f"{eq_config['type']} {i+1}" if eq_config["count"] > 1 else f"{eq_config['type']}"
+                    display_name = f"{eq_config['name']} {i+1}" if eq_config["count"] > 1 else f"{eq_config['name']}"
                     print(f"  ✅ {display_name} ({identifier})")
         
-        # 7. Créer un bâtiment "Commun" pour les équipements partagés
+        # 6. Créer un bâtiment "Commun" pour les équipements partagés
         building_common = Building(
             copro_id=copro.id,
             name="Équipements communs",
@@ -230,25 +193,23 @@ def init_test_data():
         db.flush()
         print(f"\n✅ Bâtiment commun créé: {building_common.name} (ID: {building_common.id})")
         
-        # 8. Créer les équipements communs
+        # 7. Créer les équipements communs
         print(f"\n📦 Création des équipements communs:")
         common_equipments = [
-            {"type": "Porte parking", "identifier": "PP-01", "name": "Porte parking"},
-            {"type": "Grille voiture", "identifier": "GV-01", "name": "Grille voiture"},
-            {"type": "Grille piéton", "identifier": "GP-01", "name": "Grille piéton"},
+            {"name": "Porte parking", "identifier": "PP-01"},
+            {"name": "Grille voiture", "identifier": "GV-01"},
+            {"name": "Grille piéton", "identifier": "GP-01"},
         ]
         
         for eq_data in common_equipments:
-            service_type = service_types[eq_data["type"]]
             # Ajouter l'identifier au nom pour garantir l'unicité en base
             db_name = f"{eq_data['name']} ({eq_data['identifier']})"
             equipment = ServiceInstance(
                 copro_id=copro.id,
                 building_id=building_common.id,
-                service_type_id=service_type.id,
                 name=db_name,
                 identifier=eq_data["identifier"],
-                description=f"{eq_data['type']} - Équipement commun",
+                description=None,
                 status="operational",
                 order=order_counter,
                 is_active=True
@@ -257,15 +218,14 @@ def init_test_data():
             order_counter += 1
             print(f"  ✅ {eq_data['name']} ({eq_data['identifier']})")
         
-        # 9. Commit final
+        # 8. Commit final
         db.commit()
         
         print("\n" + "="*60)
         print("✅ INITIALISATION TERMINÉE AVEC SUCCÈS")
         print("="*60)
         print(f"Copropriété: {copro.name}")
-        print(f"Bâtiments: {len(buildings)}")
-        print(f"Types de services: {len(service_types)}")
+        print(f"Bâtiments: {len(buildings) + 1}")  # +1 pour le bâtiment commun
         total_equipments = db.query(ServiceInstance).filter(ServiceInstance.copro_id == copro.id).count()
         print(f"Équipements: {total_equipments}")
         print("="*60)

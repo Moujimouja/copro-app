@@ -11,7 +11,6 @@ function Admin() {
   const [incidents, setIncidents] = useState([])
   const [admins, setAdmins] = useState([])
   const [buildings, setBuildings] = useState([])
-  const [serviceTypes, setServiceTypes] = useState([])
   const [copro, setCopro] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('copro')
@@ -59,7 +58,6 @@ function Admin() {
   })
   const [formData, setFormData] = useState({
     building_id: '',
-    service_type_id: '',
     name: '',
     identifier: '',
     description: '',
@@ -135,28 +133,6 @@ function Admin() {
     }
   }, [])
 
-  const loadServiceTypes = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        return
-      }
-
-      const response = await fetch(`${API_URL}/api/v1/admin/service-types`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setServiceTypes(data)
-      } else if (response.status === 401) {
-        localStorage.removeItem('token')
-        window.location.href = '/login'
-        return
-      }
-    } catch (error) {
-      console.error('Erreur chargement types de services:', error)
-    }
-  }, [])
 
   const loadTickets = useCallback(async () => {
     try {
@@ -308,7 +284,6 @@ function Admin() {
     } else if (activeTab === 'equipments') {
       loadEquipments()
       loadBuildings()
-      loadServiceTypes()
     } else if (activeTab === 'buildings') {
       loadBuildings()
     } else if (activeTab === 'tickets') {
@@ -321,7 +296,7 @@ function Admin() {
       loadUsers()
       loadBuildings()
     }
-  }, [activeTab, loadEquipments, loadBuildings, loadServiceTypes, loadTickets, loadCopro, loadIncidents, loadUsers, loadAdmins, navigate])
+  }, [activeTab, loadEquipments, loadBuildings, loadTickets, loadCopro, loadIncidents, loadUsers, loadAdmins, navigate])
 
   const updateEquipmentStatus = async (equipmentId, newStatus) => {
     try {
@@ -622,7 +597,6 @@ function Admin() {
     setEditingEquipment(null)
     setFormData({
       building_id: null,
-      service_type_id: '',
       name: '',
       identifier: '',
       description: '',
@@ -637,7 +611,6 @@ function Admin() {
     setEditingEquipment(equipment)
     setFormData({
       building_id: equipment.building_id,
-      service_type_id: equipment.service_type_id,
       name: equipment.name,
       identifier: equipment.identifier || '',
       description: equipment.description || '',
@@ -652,7 +625,7 @@ function Admin() {
     const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'building_id' || name === 'service_type_id' || name === 'order' 
+      [name]: name === 'building_id' || name === 'order' 
         ? (value ? Number(value) : '') 
         : value
     }))
@@ -1144,23 +1117,6 @@ function Admin() {
                   </div>
 
                   <div className="form-group">
-                    <label>Type de service *</label>
-                    <select
-                      name="service_type_id"
-                      value={formData.service_type_id}
-                      onChange={handleFormChange}
-                      required
-                    >
-                      <option value="">Sélectionner un type</option>
-                      {serviceTypes.map(st => (
-                        <option key={st.id} value={st.id}>
-                          {st.name} {st.category ? `(${st.category})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group">
                     <label>Nom *</label>
                     <input
                       type="text"
@@ -1250,7 +1206,6 @@ function Admin() {
                 <tr>
                   <th>Nom</th>
                   <th>Bâtiment</th>
-                  <th>Type</th>
                   <th>Localisation</th>
                   <th>Statut</th>
                   <th>Actions</th>
@@ -1261,7 +1216,6 @@ function Admin() {
                   <tr key={equipment.id} className={`equipment-row ${getStatusClass(equipment.status)}`}>
                     <td className="equipment-name">{equipment.name}</td>
                     <td>{equipment.building_name}</td>
-                    <td>{equipment.service_type_name}</td>
                     <td>{equipment.location || '-'}</td>
                     <td>
                       <select

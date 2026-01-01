@@ -82,12 +82,11 @@ async def get_public_service_instances(db: Session = Depends(get_db)):
     
     result = []
     for instance in service_instances:
-        db.refresh(instance, ['building', 'service_type'])
+        db.refresh(instance, ['building'])
         result.append({
             "id": instance.id,
             "name": instance.name,
             "building": instance.building.name if instance.building else "",
-            "service_type": instance.service_type.name if instance.service_type else "",
             "status": instance.status
         })
     

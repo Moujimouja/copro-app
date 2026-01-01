@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.db import SessionLocal, engine, Base
-from app.models.copro import Copro, Building, ServiceType, ServiceInstance
+from app.models.copro import Copro, Building, ServiceInstance
 from app.models.status import ServiceStatus
 
 
@@ -52,99 +52,33 @@ def create_sample_copro():
             db.refresh(building)
             print(f"✅ Bâtiment créé: {building.name} (ID: {building.id})")
         
-        # 3. Créer les types de services
-        service_types_data = [
-            {
-                "name": "Ascenseur",
-                "description": "Ascenseur de l'immeuble",
-                "icon": "🚁",
-                "category": "Équipement",
-                "default_status": "operational",
-                "order": 1
-            },
-            {
-                "name": "Éclairage",
-                "description": "Éclairage des parties communes",
-                "icon": "💡",
-                "category": "Équipement",
-                "default_status": "operational",
-                "order": 2
-            },
-            {
-                "name": "Eau chaude",
-                "description": "Production d'eau chaude sanitaire",
-                "icon": "🔥",
-                "category": "Fluide",
-                "default_status": "operational",
-                "order": 3
-            },
-            {
-                "name": "Eau froide",
-                "description": "Distribution d'eau froide",
-                "icon": "💧",
-                "category": "Fluide",
-                "default_status": "operational",
-                "order": 4
-            },
-            {
-                "name": "Porte parking",
-                "description": "Porte d'accès au parking",
-                "icon": "🚗",
-                "category": "Sécurité",
-                "default_status": "operational",
-                "order": 5
-            },
-            {
-                "name": "Chauffage",
-                "description": "Système de chauffage central",
-                "icon": "🌡️",
-                "category": "Fluide",
-                "default_status": "operational",
-                "order": 6
-            },
-        ]
-        
-        service_types = []
-        for st_data in service_types_data:
-            service_type = ServiceType(
-                copro_id=copro.id,
-                **st_data
-            )
-            db.add(service_type)
-            service_types.append(service_type)
-        
-        db.commit()
-        for service_type in service_types:
-            db.refresh(service_type)
-            print(f"✅ Type de service créé: {service_type.name} (ID: {service_type.id})")
-        
-        # 4. Créer les instances de services pour chaque bâtiment
+        # 3. Créer les équipements pour chaque bâtiment
+        equipment_names = ["Ascenseur", "Éclairage", "Eau chaude", "Eau froide", "Porte parking", "Chauffage"]
         service_instances = []
+        order_counter = 1
         
         for building in buildings:
-            for service_type in service_types:
-                # Nom du service: "Type - Bâtiment X"
-                # Utiliser le nom du bâtiment pour créer un identifiant unique
+            for eq_name in equipment_names:
                 building_short = building.name.replace("Bâtiment ", "").replace(" ", "")
-                service_name = f"{service_type.name} - {building.name}"
-                identifier = f"{service_type.name[:3].upper()}-{building_short}"
+                service_name = f"{eq_name} - {building.name}"
+                identifier = f"{eq_name[:3].upper()}-{building_short}"
                 
                 service_instance = ServiceInstance(
                     copro_id=copro.id,
                     building_id=building.id,
-                    service_type_id=service_type.id,
                     name=service_name,
                     identifier=identifier,
-                    description=f"{service_type.description}",
+                    description=f"{eq_name}",
                     location=None,
-                    status=service_type.default_status,
-                    order=service_type.order
+                    status="operational",
+                    order=order_counter
                 )
                 db.add(service_instance)
                 service_instances.append(service_instance)
+                order_counter += 1
         
         db.commit()
-        print(f"✅ {len(service_instances)} instances de services créées")
+        print(f"✅ {len(service_instances)} équipements créés")
         
         # Résumé
         print("\n" + "="*50)
@@ -152,8 +86,7 @@ def create_sample_copro():
         print("="*50)
         print(f"Copropriété: {copro.name}")
         print(f"Bâtiments: {len(buildings)}")
-        print(f"Types de services: {len(service_types)}")
-        print(f"Instances de services: {len(service_instances)}")
+        print(f"Équipements: {len(service_instances)}")
         print("="*50)
         
         return copro
@@ -166,15 +99,14 @@ def create_sample_copro():
         db.close()
 
 
-def create_custom_copro(name: str, buildings: list, service_types: list):
+def create_custom_copro(name: str, buildings: list, equipment_names: list):
     """
     Créer une copropriété personnalisée
     
     Args:
         name: Nom de la copropriété
         buildings: Liste d'identifiants de bâtiments (ex: ["A", "B", "1", "2"])
-        service_types: Liste de dictionnaires avec les types de services
-            Ex: [{"name": "Ascenseur", "icon": "🚁", "category": "Équipement"}, ...]
+        equipment_names: Liste de noms d'équipements (ex: ["Ascenseur", "Éclairage", ...])
     """
     db = SessionLocal()
     
@@ -200,37 +132,21 @@ def create_custom_copro(name: str, buildings: list, service_types: list):
         for building in db_buildings:
             db.refresh(building)
         
-        # Créer les types de services
-        db_service_types = []
-        for idx, st_data in enumerate(service_types):
-            service_type = ServiceType(
-                copro_id=copro.id,
-                name=st_data.get("name"),
-                description=st_data.get("description"),
-                icon=st_data.get("icon"),
-                category=st_data.get("category", "Équipement"),
-                default_status=st_data.get("default_status", "operational"),
-                order=idx + 1
-            )
-            db.add(service_type)
-            db_service_types.append(service_type)
-        
-        db.commit()
-        for service_type in db_service_types:
-            db.refresh(service_type)
-        
-        # Créer les instances pour chaque combinaison bâtiment/service
+        # Créer les équipements pour chaque combinaison bâtiment/équipement
+        order_counter = 1
         for building in db_buildings:
-            for service_type in db_service_types:
+            for eq_name in equipment_names:
+                building_short = building.name.replace("Bâtiment ", "").replace(" ", "")
                 service_instance = ServiceInstance(
                     copro_id=copro.id,
                     building_id=building.id,
-                    service_type_id=service_type.id,
-                    name=f"{service_type.name} - {building.name}",
-                    identifier=f"{service_type.name[:3].upper()}-{building.name.replace('Bâtiment ', '').replace(' ', '')}",
-                    status=service_type.default_status
+                    name=f"{eq_name} - {building.name}",
+                    identifier=f"{eq_name[:3].upper()}-{building_short}",
+                    status="operational",
+                    order=order_counter
                 )
                 db.add(service_instance)
+                order_counter += 1
         
         db.commit()
         print(f"✅ Copropriété '{name}' créée avec succès!")

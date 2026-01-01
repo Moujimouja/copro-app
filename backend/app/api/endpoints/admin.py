@@ -11,7 +11,7 @@ from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from app.db import get_db
-from app.models.copro import Copro, Building, ServiceType, ServiceInstance
+from app.models.copro import Copro, Building, ServiceInstance
 from app.models.status import Incident, IncidentUpdate, IncidentComment, IncidentStatus
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
@@ -28,7 +28,6 @@ class ServiceInstanceStatusUpdate(BaseModel):
 
 class ServiceInstanceCreate(BaseModel):
     building_id: int
-    service_type_id: int
     name: str
     identifier: Optional[str] = None
     description: Optional[str] = None
@@ -39,7 +38,6 @@ class ServiceInstanceCreate(BaseModel):
 
 class ServiceInstanceUpdate(BaseModel):
     building_id: Optional[int] = None
-    service_type_id: Optional[int] = None
     name: Optional[str] = None
     identifier: Optional[str] = None
     description: Optional[str] = None
@@ -53,7 +51,6 @@ class ServiceInstanceResponse(BaseModel):
     id: int
     copro_id: int
     building_id: int
-    service_type_id: int
     name: str
     identifier: Optional[str]
     description: Optional[str]
@@ -62,7 +59,6 @@ class ServiceInstanceResponse(BaseModel):
     is_active: bool
     order: int
     building_name: str
-    service_type_name: str
 
     class Config:
         from_attributes = True
@@ -161,61 +157,6 @@ async def get_copro(
     return copro
 
 
-def create_default_service_types(copro_id: int, db: Session):
-    """Créer les types de services par défaut pour une copropriété"""
-    default_service_types = [
-        {
-            "name": "Ascenseur",
-            "description": "Ascenseur de l'immeuble",
-            "category": "Équipement",
-            "order": 1
-        },
-        {
-            "name": "Éclairage",
-            "description": "Éclairage des parties communes",
-            "category": "Équipement",
-            "order": 2
-        },
-        {
-            "name": "Eau chaude",
-            "description": "Production d'eau chaude sanitaire",
-            "category": "Fluide",
-            "order": 3
-        },
-        {
-            "name": "Eau froide",
-            "description": "Distribution d'eau froide",
-            "category": "Fluide",
-            "order": 4
-        },
-        {
-            "name": "Porte parking",
-            "description": "Porte d'accès au parking",
-            "category": "Sécurité",
-            "order": 5
-        },
-    ]
-    
-    for st_data in default_service_types:
-        # Vérifier si le type existe déjà
-        existing = db.query(ServiceType).filter(
-            ServiceType.copro_id == copro_id,
-            ServiceType.name == st_data["name"]
-        ).first()
-        
-        if not existing:
-            service_type = ServiceType(
-                copro_id=copro_id,
-                name=st_data["name"],
-                description=st_data["description"],
-                category=st_data["category"],
-                default_status="operational",
-                order=st_data["order"],
-                is_active=True
-            )
-            db.add(service_type)
-    
-    db.commit()
 
 
 @router.post("/copro", response_model=CoproResponse, status_code=status.HTTP_201_CREATED)
@@ -245,9 +186,6 @@ async def create_copro(
     db.add(db_copro)
     db.commit()
     db.refresh(db_copro)
-    
-    # Créer les types de services par défaut
-    create_default_service_types(db_copro.id, db)
     
     return db_copro
 
@@ -431,32 +369,6 @@ async def delete_building(
     return None
 
 
-@router.get("/service-types", response_model=List[dict])
-async def list_service_types(
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
-    """Lister tous les types de services (admin uniquement)"""
-    copro = db.query(Copro).filter(Copro.is_active == True).first()
-    if not copro:
-        return []
-    
-    # S'assurer que les types de services par défaut existent
-    service_types_count = db.query(ServiceType).filter(
-        ServiceType.copro_id == copro.id,
-        ServiceType.is_active == True
-    ).count()
-    
-    if service_types_count == 0:
-        # Créer les types de services par défaut s'ils n'existent pas
-        create_default_service_types(copro.id, db)
-    
-    service_types = db.query(ServiceType).filter(
-        ServiceType.copro_id == copro.id,
-        ServiceType.is_active == True
-    ).order_by(ServiceType.order, ServiceType.name).all()
-    
-    return [{"id": st.id, "name": st.name, "category": st.category} for st in service_types]
 
 
 # ============ Gestion des Équipements ============
@@ -482,12 +394,11 @@ async def list_service_instances(
     
     result = []
     for instance in instances:
-        db.refresh(instance, ['building', 'service_type'])
+        db.refresh(instance, ['building'])
         result.append(ServiceInstanceResponse(
             id=instance.id,
             copro_id=instance.copro_id,
             building_id=instance.building_id,
-            service_type_id=instance.service_type_id,
             name=instance.name,
             identifier=instance.identifier,
             description=instance.description,
@@ -495,8 +406,7 @@ async def list_service_instances(
             status=instance.status,
             is_active=instance.is_active,
             order=instance.order,
-            building_name=instance.building.name if instance.building else "",
-            service_type_name=instance.service_type.name if instance.service_type else ""
+            building_name=instance.building.name if instance.building else ""
         ))
     
     return result
@@ -513,12 +423,11 @@ async def get_service_instance(
     if not instance:
         raise HTTPException(status_code=404, detail="Équipement non trouvé")
     
-    db.refresh(instance, ['building', 'service_type'])
+    db.refresh(instance, ['building'])
     return ServiceInstanceResponse(
         id=instance.id,
         copro_id=instance.copro_id,
         building_id=instance.building_id,
-        service_type_id=instance.service_type_id,
         name=instance.name,
         identifier=instance.identifier,
         description=instance.description,
@@ -526,8 +435,7 @@ async def get_service_instance(
         status=instance.status,
         is_active=instance.is_active,
         order=instance.order,
-        building_name=instance.building.name if instance.building else "",
-        service_type_name=instance.service_type.name if instance.service_type else ""
+        building_name=instance.building.name if instance.building else ""
     )
 
 
@@ -551,14 +459,6 @@ async def create_service_instance(
     if not building:
         raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
     
-    # Vérifier que le type de service existe et appartient à la copropriété
-    service_type = db.query(ServiceType).filter(
-        ServiceType.id == service_instance.service_type_id,
-        ServiceType.copro_id == copro.id
-    ).first()
-    if not service_type:
-        raise HTTPException(status_code=404, detail="Type de service non trouvé")
-    
     # Vérifier l'unicité du nom dans la copropriété
     existing = db.query(ServiceInstance).filter(
         ServiceInstance.copro_id == copro.id,
@@ -575,7 +475,6 @@ async def create_service_instance(
     db_service_instance = ServiceInstance(
         copro_id=copro.id,
         building_id=service_instance.building_id,
-        service_type_id=service_instance.service_type_id,
         name=service_instance.name,
         identifier=service_instance.identifier,
         description=service_instance.description,
@@ -586,13 +485,12 @@ async def create_service_instance(
     
     db.add(db_service_instance)
     db.commit()
-    db.refresh(db_service_instance, ['building', 'service_type'])
+    db.refresh(db_service_instance, ['building'])
     
     return ServiceInstanceResponse(
         id=db_service_instance.id,
         copro_id=db_service_instance.copro_id,
         building_id=db_service_instance.building_id,
-        service_type_id=db_service_instance.service_type_id,
         name=db_service_instance.name,
         identifier=db_service_instance.identifier,
         description=db_service_instance.description,
@@ -600,8 +498,7 @@ async def create_service_instance(
         status=db_service_instance.status,
         is_active=db_service_instance.is_active,
         order=db_service_instance.order,
-        building_name=db_service_instance.building.name if db_service_instance.building else "",
-        service_type_name=db_service_instance.service_type.name if db_service_instance.service_type else ""
+        building_name=db_service_instance.building.name if db_service_instance.building else ""
     )
 
 
@@ -632,15 +529,6 @@ async def update_service_instance(
         if not building:
             raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
     
-    # Vérifier le type de service si fourni
-    if 'service_type_id' in update_data:
-        service_type = db.query(ServiceType).filter(
-            ServiceType.id == update_data['service_type_id'],
-            ServiceType.copro_id == instance.copro_id
-        ).first()
-        if not service_type:
-            raise HTTPException(status_code=404, detail="Type de service non trouvé")
-    
     # Vérifier l'unicité du nom si fourni
     if 'name' in update_data and update_data['name'] != instance.name:
         existing = db.query(ServiceInstance).filter(
@@ -663,13 +551,12 @@ async def update_service_instance(
     
     instance.updated_at = datetime.utcnow()
     db.commit()
-    db.refresh(instance, ['building', 'service_type'])
+    db.refresh(instance, ['building'])
     
     return ServiceInstanceResponse(
         id=instance.id,
         copro_id=instance.copro_id,
         building_id=instance.building_id,
-        service_type_id=instance.service_type_id,
         name=instance.name,
         identifier=instance.identifier,
         description=instance.description,
@@ -677,8 +564,7 @@ async def update_service_instance(
         status=instance.status,
         is_active=instance.is_active,
         order=instance.order,
-        building_name=instance.building.name if instance.building else "",
-        service_type_name=instance.service_type.name if instance.service_type else ""
+        building_name=instance.building.name if instance.building else ""
     )
 
 

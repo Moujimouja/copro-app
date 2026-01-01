@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from app.db import get_db
-from app.models.copro import Copro, Building, ServiceType, ServiceInstance
+from app.models.copro import Copro, Building, ServiceInstance
 from app.models.status import ServiceStatus
 
 router = APIRouter()
@@ -57,33 +57,8 @@ class BuildingResponse(BuildingBase):
         from_attributes = True
 
 
-class ServiceTypeBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    icon: Optional[str] = None
-    category: Optional[str] = None
-    default_status: str = "operational"
-    order: int = 0
-
-
-class ServiceTypeCreate(ServiceTypeBase):
-    copro_id: int
-
-
-class ServiceTypeResponse(ServiceTypeBase):
-    id: int
-    copro_id: int
-    is_active: bool
-    created_at: str
-    updated_at: Optional[str]
-
-    class Config:
-        from_attributes = True
-
-
 class ServiceInstanceBase(BaseModel):
     building_id: int
-    service_type_id: int
     name: str
     identifier: Optional[str] = None
     description: Optional[str] = None
@@ -101,7 +76,6 @@ class ServiceInstanceResponse(ServiceInstanceBase):
     copro_id: int
     is_active: bool
     building: BuildingResponse
-    service_type: ServiceTypeResponse
     created_at: str
     updated_at: Optional[str]
 
@@ -172,32 +146,6 @@ async def list_buildings(copro_id: int, db: Session = Depends(get_db)):
     return buildings
 
 
-# ============ ServiceType Endpoints ============
-
-@router.post("/service-types", response_model=ServiceTypeResponse, status_code=status.HTTP_201_CREATED)
-async def create_service_type(service_type: ServiceTypeCreate, db: Session = Depends(get_db)):
-    """Créer un nouveau type de service"""
-    copro = db.query(Copro).filter(Copro.id == service_type.copro_id).first()
-    if not copro:
-        raise HTTPException(status_code=404, detail="Copropriété non trouvée")
-    
-    db_service_type = ServiceType(**service_type.dict())
-    db.add(db_service_type)
-    db.commit()
-    db.refresh(db_service_type)
-    return db_service_type
-
-
-@router.get("/copros/{copro_id}/service-types", response_model=List[ServiceTypeResponse])
-async def list_service_types(copro_id: int, db: Session = Depends(get_db)):
-    """Lister les types de services d'une copropriété"""
-    service_types = db.query(ServiceType).filter(
-        ServiceType.copro_id == copro_id,
-        ServiceType.is_active == True
-    ).order_by(ServiceType.order, ServiceType.name).all()
-    return service_types
-
-
 # ============ ServiceInstance Endpoints ============
 
 @router.post("/service-instances", response_model=ServiceInstanceResponse, status_code=status.HTTP_201_CREATED)
@@ -216,14 +164,6 @@ async def create_service_instance(service_instance: ServiceInstanceCreate, db: S
     if not building:
         raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
     
-    # Vérifier que le type de service existe et appartient à la copropriété
-    service_type = db.query(ServiceType).filter(
-        ServiceType.id == service_instance.service_type_id,
-        ServiceType.copro_id == service_instance.copro_id
-    ).first()
-    if not service_type:
-        raise HTTPException(status_code=404, detail="Type de service non trouvé")
-    
     # Vérifier l'unicité du nom dans la copropriété
     existing = db.query(ServiceInstance).filter(
         ServiceInstance.copro_id == service_instance.copro_id,
@@ -238,7 +178,7 @@ async def create_service_instance(service_instance: ServiceInstanceCreate, db: S
     db.refresh(db_service_instance)
     
     # Charger les relations pour la réponse
-    db.refresh(db_service_instance, ['building', 'service_type'])
+    db.refresh(db_service_instance, ['building'])
     return db_service_instance
 
 
@@ -257,7 +197,7 @@ async def list_service_instances(copro_id: int, building_id: Optional[int] = Non
     
     # Charger les relations
     for instance in service_instances:
-        db.refresh(instance, ['building', 'service_type'])
+        db.refresh(instance, ['building'])
     
     return service_instances
 
@@ -275,7 +215,7 @@ async def list_building_service_instances(building_id: int, db: Session = Depend
     ).order_by(ServiceInstance.order, ServiceInstance.name).all()
     
     for instance in service_instances:
-        db.refresh(instance, ['building', 'service_type'])
+        db.refresh(instance, ['building'])
     
     return service_instances
 

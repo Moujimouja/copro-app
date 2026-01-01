@@ -20,8 +20,6 @@ class ServiceResponse(BaseModel):
     order: int
     building_id: Optional[int] = None
     building_name: Optional[str] = None
-    service_type_id: Optional[int] = None
-    service_type_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -171,9 +169,7 @@ async def get_status_page(db: Session = Depends(get_db)):
     # Convertir ServiceInstance en ServiceResponse
     services_data = []
     for si in service_instances:
-        db.refresh(si, ['building', 'service_type'])
-        # Ne pas inclure le bâtiment dans la description car il est déjà affiché dans le titre du groupe
-        default_description = si.service_type.name if si.service_type else None
+        db.refresh(si, ['building'])
         
         # Nettoyer le nom pour enlever l'identifier entre parenthèses (ex: "Ascenseur 1 (ASC-A-01)" -> "Ascenseur 1")
         display_name = si.name
@@ -184,13 +180,11 @@ async def get_status_page(db: Session = Depends(get_db)):
         services_data.append(ServiceResponse(
             id=si.id,
             name=display_name,
-            description=si.description or default_description,
+            description=si.description,
             status=si.status,
             order=si.order,
             building_id=si.building_id,
-            building_name=si.building.name if si.building else None,
-            service_type_id=si.service_type_id,
-            service_type_name=si.service_type.name if si.service_type else None
+            building_name=si.building.name if si.building else None
         ))
     
     return {
