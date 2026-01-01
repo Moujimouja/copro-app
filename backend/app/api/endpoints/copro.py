@@ -280,3 +280,4 @@ async def list_building_service_instances(building_id: int, db: Session = Depend
     
     return service_instances
 
+

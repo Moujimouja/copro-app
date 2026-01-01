@@ -56,3 +56,4 @@ class Ticket(Base):
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     incident = relationship("Incident", foreign_keys=[incident_id])
 
+

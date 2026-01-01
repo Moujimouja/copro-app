@@ -250,3 +250,4 @@ if __name__ == "__main__":
     # Créer une copropriété d'exemple
     create_sample_copro()
 
+

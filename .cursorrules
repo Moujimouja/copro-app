@@ -1,39 +1,92 @@
-You are an AI assistant helping to build a multi-tenant web application called "copro-app". 
+You are an AI assistant helping to build a web application called "copro-app" for managing a single condominium residence.
 The goal of copro-app is to help manage condominium residence operations, including:
-- Login and user authentication (future: residents, syndic, council, maintenance)
-- Ticket creation, incident reporting, and follow-up
+- Login and user authentication (admin only for now, future: residents, syndic, council, maintenance)
+- Admin interface for managing equipment (ServiceInstance) and their status
+- Public incident reporting form (tickets) with QR code access
 - Status Page (similar to CachetHQ): show services of the residence (ex: elevators, doors, parking gates, heating) + uptime, incidents, scheduled maintenance
-- Dashboard and analytics showing overall availability and key metrics
-- Notifications system (email, push) for incident updates
-- Multi-tenant architecture: 1 instance per residence (initially manual deployment)
+- Ticket management: public can create tickets, admin reviews and can create incidents
+- Dashboard and analytics showing overall availability and key metrics (future)
+- Notifications system (email, push) for incident updates (future)
 
 🧱 Tech stack
-Backend: FastAPI (Python), PostgreSQL, Docker, reverse proxy (traefik or nginx), JWT auth
-Frontend: React + TypeScript + Vite (SPA), Tailwind UI (UI kit)
+Backend: FastAPI (Python 3.11), PostgreSQL 15, Docker, JWT auth with bcrypt (direct, not passlib)
+Frontend: React 18 + Vite (SPA), no TypeScript yet (plain JSX)
 Target architecture: Docker-based (dev + prod), can run on AWS or on a Mac Freebox-exposed server
 
+📊 Data Models (SQLAlchemy)
+- Copro: Single copropriété (one instance = one copro)
+- Building: Buildings in the copro (A, B, 1, 2, etc.)
+- ServiceType: Template service types (Ascenseur, Éclairage, Eau chaude, etc.)
+- ServiceInstance: Actual equipment instances in buildings
+- Ticket: Public incident reports (pending → admin reviews → approved/rejected)
+- Incident: Official incidents created by admin
+- User: Users with is_superuser flag for admin access
+
+🔑 Authentication
+- JWT-based authentication
+- Admin account: username "admin", password "admin123" (created via script)
+- Only admins can access /admin routes
+- Public routes: /status, /report (no auth required)
+
+📁 Project Structure
+backend/app/
+├── models/
+│   ├── copro.py          # Copro, Building, ServiceType, ServiceInstance
+│   ├── status.py         # Incident, IncidentUpdate, ServiceStatus enums
+│   ├── ticket.py         # Ticket, TicketStatus
+│   └── user.py           # User (with copro_id, is_superuser)
+├── api/endpoints/
+│   ├── admin.py          # Admin-only endpoints (equipment, incidents, tickets)
+│   ├── auth.py           # Login, register
+│   ├── copro.py          # CRUD for copro entities (if needed)
+│   ├── public.py         # Public endpoints (ticket creation, service list)
+│   └── status.py         # Status page data (public)
+├── scripts/
+│   ├── create_admin.py   # Create admin user
+│   └── seed_copro.py     # Seed sample copro with buildings/services
+└── core/config.py        # Settings (CORS, DB, etc.)
+
+frontend/src/
+├── App.jsx               # Main app with routing, header
+├── Admin.jsx             # Admin interface (equipment management, tickets)
+├── Status.jsx            # Public status page
+├── ReportIncident.jsx    # Public incident reporting form with QR code
+└── Login.jsx             # Login form
+
 📌 Key requirements:
+- App is for ONE copropriété per instance (simplified, no multi-tenant)
 - App must be modular, agnostic, and easily deployable
 - Code must be clean and maintainable (DDD or modular services)
-- API documented using OpenAPI
+- API documented using OpenAPI (FastAPI auto-docs)
 - Frontend communicates via REST API
+- Mobile-friendly design (responsive)
 
 🧪 Development workflow
 - Whenever I ask for code, update existing files instead of rewriting everything
 - Always propose file-level changes in patch format
 - Ask clarifying questions if requirements are ambiguous
 - Keep long-term coherence in naming, folder structure, auth flow
+- Use bcrypt directly (not passlib) for password hashing
+- CORS configured for localhost:5173 and localhost:3000
 
 🚨 Cursor should remember:
-- Multi-tenant scope
+- Single copropriété per instance (not multi-tenant)
 - Status page + incident ticketing are core features
+- Admin interface for equipment management is essential
+- Public ticket form with QR code for easy access
 - Deployment simplicity is a priority
+- Use ServiceInstance (not old Service model) for equipment
+- Admin routes require is_superuser = True
 
 🎯 What you should do when I ask:
 1️⃣ Understand context + architecture
 2️⃣ Propose incremental changes
 3️⃣ Suggest folder/content updates
 4️⃣ Give me Docker and production guidance when needed
+5️⃣ Remember: one copro per instance, admin-only management, public reporting
+
+🔧 Available Scripts
+- Create admin: `python -m app.scripts.create_admin` (creates admin/admin123)
+- Seed copro: `python -m app.scripts.seed_copro` (creates sample copro with buildings/services)
 
 If any task is unclear, ask questions before producing code.
-

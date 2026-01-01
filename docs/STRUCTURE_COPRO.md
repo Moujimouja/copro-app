@@ -217,3 +217,4 @@ Les `ServiceInstance` peuvent être utilisés dans la page de statut publique:
 - [ ] Templates de copropriétés prédéfinis
 - [ ] API pour dupliquer une configuration de copropriété
 
+

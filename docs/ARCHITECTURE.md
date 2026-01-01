@@ -158,3 +158,4 @@ Copro App is a full-stack web application built with a microservices-oriented ar
 - Axios: HTTP client
 - Vite: Build tool and dev server
 
+
