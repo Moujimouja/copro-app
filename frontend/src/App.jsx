@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom'
 import Status from './Status'
 import Admin from './Admin'
 import ReportIncident from './ReportIncident'
@@ -11,6 +11,7 @@ function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
+  const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -26,14 +27,19 @@ function Login() {
       
       if (response.ok) {
         const data = await response.json()
-        localStorage.setItem('token', data.access_token)
-        setMessage('Login successful!')
-        // Rediriger après connexion
-        setTimeout(() => {
-          window.location.href = '/admin'
-        }, 1000)
+        // Stocker le token
+        if (data.access_token) {
+          localStorage.setItem('token', data.access_token)
+          console.log('Token stocké:', data.access_token.substring(0, 50) + '...')
+          setMessage('Connexion réussie!')
+          // Rediriger vers admin immédiatement
+          navigate('/admin')
+        } else {
+          setMessage('Erreur: Token non reçu')
+        }
       } else {
-        setMessage('Login failed')
+        const errorData = await response.json().catch(() => ({ detail: 'Échec de la connexion' }))
+        setMessage(`Erreur: ${errorData.detail || 'Échec de la connexion'}`)
       }
     } catch (error) {
       setMessage('Error: ' + error.message)

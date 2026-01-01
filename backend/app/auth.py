@@ -54,14 +54,20 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: int = payload.get("sub")
-        if user_id is None:
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
             raise credentials_exception
-    except JWTError:
+        # Convertir le string en int pour la requête DB
+        user_id: int = int(user_id_str)
+    except (JWTError, ValueError, TypeError) as e:
+        import logging
+        logging.error(f"JWT Error: {str(e)}, token: {token[:50] if token else 'None'}...")
         raise credentials_exception
     
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
+        import logging
+        logging.error(f"User not found for id: {user_id}")
         raise credentials_exception
     return user
 

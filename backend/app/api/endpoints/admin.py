@@ -26,6 +26,29 @@ class ServiceInstanceStatusUpdate(BaseModel):
     status: str  # operational, degraded, partial_outage, major_outage, maintenance
 
 
+class ServiceInstanceCreate(BaseModel):
+    building_id: int
+    service_type_id: int
+    name: str
+    identifier: Optional[str] = None
+    description: Optional[str] = None
+    location: Optional[str] = None
+    status: str = "operational"
+    order: int = 0
+
+
+class ServiceInstanceUpdate(BaseModel):
+    building_id: Optional[int] = None
+    service_type_id: Optional[int] = None
+    name: Optional[str] = None
+    identifier: Optional[str] = None
+    description: Optional[str] = None
+    location: Optional[str] = None
+    status: Optional[str] = None
+    order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
 class ServiceInstanceResponse(BaseModel):
     id: int
     copro_id: int
@@ -37,8 +60,10 @@ class ServiceInstanceResponse(BaseModel):
     location: Optional[str]
     status: str
     is_active: bool
+    order: int
     building_name: str
     service_type_name: str
+    building_identifier: str
 
     class Config:
         from_attributes = True
@@ -79,6 +104,284 @@ async def get_admin_user(
     return current_user
 
 
+# ============ Gestion de la Copropriété ============
+
+class CoproCreate(BaseModel):
+    name: str
+    address: Optional[str] = None
+    city: Optional[str] = None
+    postal_code: Optional[str] = None
+    country: str = "France"
+
+
+class CoproUpdate(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    postal_code: Optional[str] = None
+    country: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class CoproResponse(BaseModel):
+    id: int
+    name: str
+    address: Optional[str]
+    city: Optional[str]
+    postal_code: Optional[str]
+    country: str
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/copro", response_model=CoproResponse)
+async def get_copro(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Obtenir la copropriété (admin uniquement)"""
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        raise HTTPException(status_code=404, detail="Aucune copropriété configurée")
+    return copro
+
+
+@router.post("/copro", response_model=CoproResponse, status_code=status.HTTP_201_CREATED)
+async def create_copro(
+    copro_data: CoproCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Créer une copropriété (admin uniquement)"""
+    # Vérifier s'il existe déjà une copropriété active
+    existing = db.query(Copro).filter(Copro.is_active == True).first()
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="Une copropriété active existe déjà. Modifiez-la ou désactivez-la d'abord."
+        )
+    
+    db_copro = Copro(
+        name=copro_data.name,
+        address=copro_data.address,
+        city=copro_data.city,
+        postal_code=copro_data.postal_code,
+        country=copro_data.country,
+        is_active=True
+    )
+    
+    db.add(db_copro)
+    db.commit()
+    db.refresh(db_copro)
+    
+    return db_copro
+
+
+@router.put("/copro/{copro_id}", response_model=CoproResponse)
+async def update_copro(
+    copro_id: int,
+    copro_update: CoproUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Mettre à jour la copropriété (admin uniquement)"""
+    copro = db.query(Copro).filter(Copro.id == copro_id).first()
+    if not copro:
+        raise HTTPException(status_code=404, detail="Copropriété non trouvée")
+    
+    update_data = copro_update.dict(exclude_unset=True)
+    
+    # Appliquer les mises à jour
+    for field, value in update_data.items():
+        setattr(copro, field, value)
+    
+    copro.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(copro)
+    
+    return copro
+
+
+# ============ Gestion des Bâtiments et Types de Services ============
+
+class BuildingCreate(BaseModel):
+    identifier: str
+    name: Optional[str] = None
+    description: Optional[str] = None
+    order: int = 0
+
+
+class BuildingUpdate(BaseModel):
+    identifier: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class BuildingResponse(BaseModel):
+    id: int
+    copro_id: int
+    identifier: str
+    name: Optional[str]
+    description: Optional[str]
+    order: int
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/buildings", response_model=List[BuildingResponse])
+async def list_buildings(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Lister tous les bâtiments (admin uniquement)"""
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        return []
+    
+    buildings = db.query(Building).filter(
+        Building.copro_id == copro.id
+    ).order_by(Building.order, Building.identifier).all()
+    
+    return buildings
+
+
+@router.get("/buildings/{building_id}", response_model=BuildingResponse)
+async def get_building(
+    building_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Obtenir un bâtiment par ID (admin uniquement)"""
+    building = db.query(Building).filter(Building.id == building_id).first()
+    if not building:
+        raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
+    return building
+
+
+@router.post("/buildings", response_model=BuildingResponse, status_code=status.HTTP_201_CREATED)
+async def create_building(
+    building: BuildingCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Créer un nouveau bâtiment (admin uniquement)"""
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        raise HTTPException(status_code=404, detail="Aucune copropriété configurée")
+    
+    # Vérifier l'unicité de l'identifiant dans la copropriété
+    existing = db.query(Building).filter(
+        Building.copro_id == copro.id,
+        Building.identifier == building.identifier
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Un bâtiment avec l'identifiant '{building.identifier}' existe déjà")
+    
+    db_building = Building(
+        copro_id=copro.id,
+        identifier=building.identifier,
+        name=building.name,
+        description=building.description,
+        order=building.order
+    )
+    
+    db.add(db_building)
+    db.commit()
+    db.refresh(db_building)
+    
+    return db_building
+
+
+@router.put("/buildings/{building_id}", response_model=BuildingResponse)
+async def update_building(
+    building_id: int,
+    building_update: BuildingUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Mettre à jour un bâtiment (admin uniquement)"""
+    building = db.query(Building).filter(Building.id == building_id).first()
+    if not building:
+        raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
+    
+    update_data = building_update.dict(exclude_unset=True)
+    
+    # Vérifier l'unicité de l'identifiant si modifié
+    if 'identifier' in update_data and update_data['identifier'] != building.identifier:
+        existing = db.query(Building).filter(
+            Building.copro_id == building.copro_id,
+            Building.identifier == update_data['identifier'],
+            Building.id != building_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Un bâtiment avec l'identifiant '{update_data['identifier']}' existe déjà")
+    
+    # Appliquer les mises à jour
+    for field, value in update_data.items():
+        setattr(building, field, value)
+    
+    building.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(building)
+    
+    return building
+
+
+@router.delete("/buildings/{building_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_building(
+    building_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Supprimer un bâtiment (admin uniquement)"""
+    building = db.query(Building).filter(Building.id == building_id).first()
+    if not building:
+        raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
+    
+    # Vérifier s'il y a des équipements associés
+    service_instances = db.query(ServiceInstance).filter(
+        ServiceInstance.building_id == building_id
+    ).count()
+    
+    if service_instances > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Impossible de supprimer ce bâtiment car {service_instances} équipement(s) y sont associés"
+        )
+    
+    db.delete(building)
+    db.commit()
+    return None
+
+
+@router.get("/service-types", response_model=List[dict])
+async def list_service_types(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Lister tous les types de services (admin uniquement)"""
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        return []
+    
+    service_types = db.query(ServiceType).filter(
+        ServiceType.copro_id == copro.id,
+        ServiceType.is_active == True
+    ).order_by(ServiceType.order, ServiceType.name).all()
+    
+    return [{"id": st.id, "name": st.name, "category": st.category} for st in service_types]
+
+
 # ============ Gestion des Équipements ============
 
 @router.get("/service-instances", response_model=List[ServiceInstanceResponse])
@@ -114,11 +417,212 @@ async def list_service_instances(
             location=instance.location,
             status=instance.status,
             is_active=instance.is_active,
+            order=instance.order,
             building_name=instance.building.name if instance.building else "",
-            service_type_name=instance.service_type.name if instance.service_type else ""
+            service_type_name=instance.service_type.name if instance.service_type else "",
+            building_identifier=instance.building.identifier if instance.building else ""
         ))
     
     return result
+
+
+@router.get("/service-instances/{instance_id}", response_model=ServiceInstanceResponse)
+async def get_service_instance(
+    instance_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Obtenir un équipement par ID (admin uniquement)"""
+    instance = db.query(ServiceInstance).filter(ServiceInstance.id == instance_id).first()
+    if not instance:
+        raise HTTPException(status_code=404, detail="Équipement non trouvé")
+    
+    db.refresh(instance, ['building', 'service_type'])
+    return ServiceInstanceResponse(
+        id=instance.id,
+        copro_id=instance.copro_id,
+        building_id=instance.building_id,
+        service_type_id=instance.service_type_id,
+        name=instance.name,
+        identifier=instance.identifier,
+        description=instance.description,
+        location=instance.location,
+        status=instance.status,
+        is_active=instance.is_active,
+        order=instance.order,
+        building_name=instance.building.name if instance.building else "",
+        service_type_name=instance.service_type.name if instance.service_type else "",
+        building_identifier=instance.building.identifier if instance.building else ""
+    )
+
+
+@router.post("/service-instances", response_model=ServiceInstanceResponse, status_code=status.HTTP_201_CREATED)
+async def create_service_instance(
+    service_instance: ServiceInstanceCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Créer un nouvel équipement (admin uniquement)"""
+    # Récupérer la première (et seule) copropriété
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        raise HTTPException(status_code=404, detail="Aucune copropriété configurée")
+    
+    # Vérifier que le bâtiment existe et appartient à la copropriété
+    building = db.query(Building).filter(
+        Building.id == service_instance.building_id,
+        Building.copro_id == copro.id
+    ).first()
+    if not building:
+        raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
+    
+    # Vérifier que le type de service existe et appartient à la copropriété
+    service_type = db.query(ServiceType).filter(
+        ServiceType.id == service_instance.service_type_id,
+        ServiceType.copro_id == copro.id
+    ).first()
+    if not service_type:
+        raise HTTPException(status_code=404, detail="Type de service non trouvé")
+    
+    # Vérifier l'unicité du nom dans la copropriété
+    existing = db.query(ServiceInstance).filter(
+        ServiceInstance.copro_id == copro.id,
+        ServiceInstance.name == service_instance.name
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Un équipement avec le nom '{service_instance.name}' existe déjà")
+    
+    # Valider le statut
+    valid_statuses = ["operational", "degraded", "partial_outage", "major_outage", "maintenance"]
+    if service_instance.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Statut invalide. Valeurs acceptées: {valid_statuses}")
+    
+    db_service_instance = ServiceInstance(
+        copro_id=copro.id,
+        building_id=service_instance.building_id,
+        service_type_id=service_instance.service_type_id,
+        name=service_instance.name,
+        identifier=service_instance.identifier,
+        description=service_instance.description,
+        location=service_instance.location,
+        status=service_instance.status,
+        order=service_instance.order
+    )
+    
+    db.add(db_service_instance)
+    db.commit()
+    db.refresh(db_service_instance, ['building', 'service_type'])
+    
+    return ServiceInstanceResponse(
+        id=db_service_instance.id,
+        copro_id=db_service_instance.copro_id,
+        building_id=db_service_instance.building_id,
+        service_type_id=db_service_instance.service_type_id,
+        name=db_service_instance.name,
+        identifier=db_service_instance.identifier,
+        description=db_service_instance.description,
+        location=db_service_instance.location,
+        status=db_service_instance.status,
+        is_active=db_service_instance.is_active,
+        order=db_service_instance.order,
+        building_name=db_service_instance.building.name if db_service_instance.building else "",
+        service_type_name=db_service_instance.service_type.name if db_service_instance.service_type else "",
+        building_identifier=db_service_instance.building.identifier if db_service_instance.building else ""
+    )
+
+
+@router.put("/service-instances/{instance_id}", response_model=ServiceInstanceResponse)
+async def update_service_instance(
+    instance_id: int,
+    service_instance_update: ServiceInstanceUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Mettre à jour un équipement (admin uniquement)"""
+    instance = db.query(ServiceInstance).filter(ServiceInstance.id == instance_id).first()
+    if not instance:
+        raise HTTPException(status_code=404, detail="Équipement non trouvé")
+    
+    # Récupérer la copropriété
+    copro = db.query(Copro).filter(Copro.id == instance.copro_id).first()
+    
+    # Mettre à jour les champs fournis
+    update_data = service_instance_update.dict(exclude_unset=True)
+    
+    # Vérifier le bâtiment si fourni
+    if 'building_id' in update_data:
+        building = db.query(Building).filter(
+            Building.id == update_data['building_id'],
+            Building.copro_id == instance.copro_id
+        ).first()
+        if not building:
+            raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
+    
+    # Vérifier le type de service si fourni
+    if 'service_type_id' in update_data:
+        service_type = db.query(ServiceType).filter(
+            ServiceType.id == update_data['service_type_id'],
+            ServiceType.copro_id == instance.copro_id
+        ).first()
+        if not service_type:
+            raise HTTPException(status_code=404, detail="Type de service non trouvé")
+    
+    # Vérifier l'unicité du nom si fourni
+    if 'name' in update_data and update_data['name'] != instance.name:
+        existing = db.query(ServiceInstance).filter(
+            ServiceInstance.copro_id == instance.copro_id,
+            ServiceInstance.name == update_data['name'],
+            ServiceInstance.id != instance_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Un équipement avec le nom '{update_data['name']}' existe déjà")
+    
+    # Valider le statut si fourni
+    if 'status' in update_data:
+        valid_statuses = ["operational", "degraded", "partial_outage", "major_outage", "maintenance"]
+        if update_data['status'] not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"Statut invalide. Valeurs acceptées: {valid_statuses}")
+    
+    # Appliquer les mises à jour
+    for field, value in update_data.items():
+        setattr(instance, field, value)
+    
+    instance.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(instance, ['building', 'service_type'])
+    
+    return ServiceInstanceResponse(
+        id=instance.id,
+        copro_id=instance.copro_id,
+        building_id=instance.building_id,
+        service_type_id=instance.service_type_id,
+        name=instance.name,
+        identifier=instance.identifier,
+        description=instance.description,
+        location=instance.location,
+        status=instance.status,
+        is_active=instance.is_active,
+        order=instance.order,
+        building_name=instance.building.name if instance.building else "",
+        service_type_name=instance.service_type.name if instance.service_type else "",
+        building_identifier=instance.building.identifier if instance.building else ""
+    )
+
+
+@router.delete("/service-instances/{instance_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_service_instance(
+    instance_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Supprimer un équipement (admin uniquement)"""
+    instance = db.query(ServiceInstance).filter(ServiceInstance.id == instance_id).first()
+    if not instance:
+        raise HTTPException(status_code=404, detail="Équipement non trouvé")
+    
+    db.delete(instance)
+    db.commit()
+    return None
 
 
 @router.patch("/service-instances/{instance_id}/status")
