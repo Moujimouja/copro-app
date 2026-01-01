@@ -863,8 +863,9 @@
     gap: 0.5rem;
   }
 
-.ticket-actions button {
-  width: 100%;
+  .ticket-actions button {
+    width: 100%;
+  }
 }
 
 .select-assign {
@@ -920,14 +921,16 @@
 .incident-header {
   display: flex;
   justify-content: space-between;
-  align-items: start;
+  align-items: center;
   margin-bottom: 1rem;
+  gap: 1rem;
 }
 
 .incident-header h3 {
   margin: 0;
   color: #1f2937;
   flex: 1;
+  font-size: 1.125rem;
 }
 
 .incident-status {
@@ -955,6 +958,94 @@
 .incident-status.incident-closed {
   background-color: #f3f4f6;
   color: #374151;
+}
+
+/* Dropdown de statut pour incidents */
+.incident-status-select {
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: white;
+  min-width: 180px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.5rem;
+  flex-shrink: 0;
+}
+
+.incident-status-select:hover {
+  border-color: #9ca3af;
+}
+
+.incident-status-select:focus {
+  outline: none;
+  border-color: #4A154B;
+  box-shadow: 0 0 0 3px rgba(74, 21, 75, 0.1);
+}
+
+/* Couleurs selon le statut */
+.incident-status-select.incident-status-investigating {
+  border-color: #3b82f6;
+  color: #1e40af;
+  background-color: #eff6ff;
+}
+
+.incident-status-select.incident-status-investigating:hover {
+  background-color: #dbeafe;
+}
+
+.incident-status-select.incident-status-in_progress {
+  border-color: #f59e0b;
+  color: #92400e;
+  background-color: #fffbeb;
+}
+
+.incident-status-select.incident-status-in_progress:hover {
+  background-color: #fef3c7;
+}
+
+.incident-status-select.incident-status-resolved {
+  border-color: #10b981;
+  color: #065f46;
+  background-color: #ecfdf5;
+}
+
+.incident-status-select.incident-status-resolved:hover {
+  background-color: #d1fae5;
+}
+
+.incident-status-select.incident-status-closed {
+  border-color: #6b7280;
+  color: #374151;
+  background-color: #f9fafb;
+}
+
+.incident-status-select.incident-status-closed:hover {
+  background-color: #f3f4f6;
+}
+
+/* Ligne d'info dans le modal */
+.incident-info-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.incident-info-row label {
+  min-width: 100px;
+  margin: 0;
+}
+
+.incident-info-row select {
+  flex: 1;
+  max-width: 300px;
 }
 
 .incident-body {
@@ -1144,7 +1235,17 @@
 
   .incident-header {
     flex-direction: column;
-    gap: 0.5rem;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .incident-header h3 {
+    font-size: 1rem;
+  }
+
+  .incident-status-select {
+    width: 100%;
+    min-width: auto;
   }
 
   .incident-actions {
@@ -1153,6 +1254,20 @@
 
   .incident-actions button {
     width: 100%;
+  }
+
+  .incident-info-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .incident-info-row label {
+    min-width: auto;
+  }
+
+  .incident-info-row select {
+    max-width: 100%;
   }
 
   .modal-large {

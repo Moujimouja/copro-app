@@ -1532,12 +1532,20 @@ function Admin() {
               >
                 <div className="incident-header">
                   <h3>{incident.title}</h3>
-                  <span className={`incident-status incident-${incident.status}`}>
-                    {incident.status === 'investigating' && 'En cours d\'analyse'}
-                    {incident.status === 'in_progress' && 'En cours de traitement'}
-                    {incident.status === 'resolved' && 'Résolu'}
-                    {incident.status === 'closed' && 'Clos'}
-                  </span>
+                  <select
+                    value={incident.status}
+                    onChange={(e) => {
+                      e.stopPropagation()
+                      updateIncidentStatus(incident.id, e.target.value)
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className={`incident-status-select incident-status-${incident.status}`}
+                  >
+                    <option value="investigating">En cours d'analyse</option>
+                    <option value="in_progress">En cours de traitement</option>
+                    <option value="resolved">Résolu</option>
+                    <option value="closed">Clos</option>
+                  </select>
                 </div>
                 <div className="incident-body">
                   <p><strong>Description:</strong> {incident.message}</p>
@@ -1546,39 +1554,6 @@ function Admin() {
                   {incident.resolved_at && <p><strong>Résolu le:</strong> {new Date(incident.resolved_at).toLocaleString('fr-FR')}</p>}
                 </div>
                 <div className="incident-actions">
-                  {incident.status === 'investigating' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        updateIncidentStatus(incident.id, 'in_progress')
-                      }}
-                      className="btn-progress"
-                    >
-                      Passer en traitement
-                    </button>
-                  )}
-                  {incident.status === 'in_progress' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        updateIncidentStatus(incident.id, 'resolved')
-                      }}
-                      className="btn-resolve"
-                    >
-                      Marquer comme résolu
-                    </button>
-                  )}
-                  {incident.status === 'resolved' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        updateIncidentStatus(incident.id, 'closed')
-                      }}
-                      className="btn-close"
-                    >
-                      Clore l'incident
-                    </button>
-                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
@@ -1604,46 +1579,25 @@ function Admin() {
                 </div>
                 <div className="incident-details">
                   <div className="incident-info">
-                    <p><strong>Statut:</strong> 
-                      <span className={`incident-status incident-${selectedIncident.status}`}>
-                        {selectedIncident.status === 'investigating' && 'En cours d\'analyse'}
-                        {selectedIncident.status === 'in_progress' && 'En cours de traitement'}
-                        {selectedIncident.status === 'resolved' && 'Résolu'}
-                        {selectedIncident.status === 'closed' && 'Clos'}
-                      </span>
-                    </p>
+                    <div className="incident-info-row">
+                      <label><strong>Statut:</strong></label>
+                      <select
+                        value={selectedIncident.status}
+                        onChange={(e) => updateIncidentStatus(selectedIncident.id, e.target.value)}
+                        className={`incident-status-select incident-status-${selectedIncident.status}`}
+                      >
+                        <option value="investigating">En cours d'analyse</option>
+                        <option value="in_progress">En cours de traitement</option>
+                        <option value="resolved">Résolu</option>
+                        <option value="closed">Clos</option>
+                      </select>
+                    </div>
                     <p><strong>Description:</strong> {selectedIncident.message}</p>
                     {selectedIncident.service_instance && <p><strong>Équipement:</strong> {selectedIncident.service_instance}</p>}
                     <p><strong>Créé le:</strong> {new Date(selectedIncident.created_at).toLocaleString('fr-FR')}</p>
                     {selectedIncident.resolved_at && <p><strong>Résolu le:</strong> {new Date(selectedIncident.resolved_at).toLocaleString('fr-FR')}</p>}
                   </div>
 
-                  <div className="incident-actions-detail">
-                    {selectedIncident.status === 'investigating' && (
-                      <button
-                        onClick={() => updateIncidentStatus(selectedIncident.id, 'in_progress')}
-                        className="btn-progress"
-                      >
-                        Passer en traitement
-                      </button>
-                    )}
-                    {selectedIncident.status === 'in_progress' && (
-                      <button
-                        onClick={() => updateIncidentStatus(selectedIncident.id, 'resolved')}
-                        className="btn-resolve"
-                      >
-                        Marquer comme résolu
-                      </button>
-                    )}
-                    {selectedIncident.status === 'resolved' && (
-                      <button
-                        onClick={() => updateIncidentStatus(selectedIncident.id, 'closed')}
-                        className="btn-close"
-                      >
-                        Clore l'incident
-                      </button>
-                    )}
-                  </div>
 
                   <div className="comments-section">
                     <h4>Commentaires</h4>
