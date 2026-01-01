@@ -42,14 +42,12 @@ class UserRegister(BaseModel):
 
 class UserCreate(BaseModel):
     email: EmailStr
-    username: str
     password: str
 
 
 class UserResponse(BaseModel):
     id: int
     email: str
-    username: str
     is_active: bool
 
     class Config:
@@ -78,19 +76,9 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Aucune copropriété configurée")
     
     # Créer le nouvel utilisateur (inactif par défaut)
-    # Générer un username basé sur l'email pour la compatibilité (partie avant @)
-    username_from_email = user_data.email.split('@')[0]
-    # S'assurer que le username est unique
-    base_username = username_from_email
-    counter = 1
-    while db.query(User).filter(User.username == username_from_email).first():
-        username_from_email = f"{base_username}{counter}"
-        counter += 1
-    
     hashed_password = get_password_hash(user_data.password)
     db_user = User(
         email=user_data.email,
-        username=username_from_email,  # Généré automatiquement depuis l'email
         hashed_password=hashed_password,
         first_name=user_data.first_name,
         last_name=user_data.last_name,

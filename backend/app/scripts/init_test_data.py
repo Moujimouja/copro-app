@@ -31,13 +31,10 @@ def create_admin_if_not_exists(db):
         # S'assurer que le compte est actif et admin
         existing_admin.is_superuser = True
         existing_admin.is_active = True
-        if not existing_admin.username:
-            existing_admin.username = "admin"
         db.commit()
         return existing_admin
     
     admin = User(
-        username="admin",  # Généré pour compatibilité
         email="admin@admin.com",
         hashed_password=get_password_hash("admin123"),
         is_superuser=True,
@@ -120,15 +117,14 @@ def init_test_data():
         
         # 5. Créer les 2 bâtiments
         buildings_data = [
-            {"identifier": "A", "name": "Bâtiment A", "description": "Premier bâtiment", "order": 1},
-            {"identifier": "B", "name": "Bâtiment B", "description": "Deuxième bâtiment", "order": 2},
+            {"name": "Bâtiment A", "description": "Premier bâtiment", "order": 1},
+            {"name": "Bâtiment B", "description": "Deuxième bâtiment", "order": 2},
         ]
         
         buildings = {}
         for b_data in buildings_data:
             building = Building(
                 copro_id=copro.id,
-                identifier=b_data["identifier"],
                 name=b_data["name"],
                 description=b_data["description"],
                 order=b_data["order"],
@@ -136,8 +132,8 @@ def init_test_data():
             )
             db.add(building)
             db.flush()
-            buildings[b_data["identifier"]] = building
-            print(f"✅ Bâtiment créé: {building.identifier} - {building.name} (ID: {building.id})")
+            buildings[b_data["name"]] = building
+            print(f"✅ Bâtiment créé: {building.name} (ID: {building.id})")
         
         # 6. Créer les équipements pour chaque bâtiment
         building_equipments = [
@@ -150,17 +146,19 @@ def init_test_data():
         ]
         
         order_counter = 1
-        for building_id, building in buildings.items():
-            print(f"\n📦 Création des équipements pour le bâtiment {building_id}:")
+        for building_name, building in buildings.items():
+            print(f"\n📦 Création des équipements pour le bâtiment {building_name}:")
             for eq_config in building_equipments:
                 service_type = service_types[eq_config["type"]]
                 for i in range(eq_config["count"]):
                     if eq_config["count"] > 1:
-                        # Utiliser l'identifier pour rendre le nom unique dans la DB, mais l'affichage utilisera juste le type
-                        identifier = f"{eq_config['prefix']}-{building_id}-{i+1:02d}"
+                        # Utiliser un identifiant basé sur le nom du bâtiment pour rendre le nom unique dans la DB
+                        building_short = building_name.replace("Bâtiment ", "").replace(" ", "")
+                        identifier = f"{eq_config['prefix']}-{building_short}-{i+1:02d}"
                         name = f"{eq_config['type']} {i+1} ({identifier})"
                     else:
-                        identifier = f"{eq_config['prefix']}-{building_id}"
+                        building_short = building_name.replace("Bâtiment ", "").replace(" ", "")
+                        identifier = f"{eq_config['prefix']}-{building_short}"
                         name = f"{eq_config['type']} ({identifier})"
                     
                     equipment = ServiceInstance(
@@ -183,7 +181,6 @@ def init_test_data():
         # 7. Créer un bâtiment "Commun" pour les équipements partagés
         building_common = Building(
             copro_id=copro.id,
-            identifier="COMMUN",
             name="Équipements communs",
             description="Équipements partagés entre tous les bâtiments",
             order=99,
@@ -191,7 +188,7 @@ def init_test_data():
         )
         db.add(building_common)
         db.flush()
-        print(f"\n✅ Bâtiment commun créé: {building_common.identifier} - {building_common.name} (ID: {building_common.id})")
+        print(f"\n✅ Bâtiment commun créé: {building_common.name} (ID: {building_common.id})")
         
         # 8. Créer les équipements communs
         print(f"\n📦 Création des équipements communs:")

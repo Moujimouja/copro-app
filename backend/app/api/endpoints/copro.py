@@ -37,8 +37,7 @@ class CoproResponse(CoproBase):
 
 
 class BuildingBase(BaseModel):
-    identifier: str  # A, B, 1, 2, etc.
-    name: Optional[str] = None
+    name: str  # Nom unique du bâtiment
     description: Optional[str] = None
     order: int = 0
 
@@ -148,13 +147,13 @@ async def create_building(building: BuildingCreate, db: Session = Depends(get_db
     if not copro:
         raise HTTPException(status_code=404, detail="Copropriété non trouvée")
     
-    # Vérifier l'unicité de l'identifiant dans la copropriété
+    # Vérifier l'unicité du nom dans la copropriété
     existing = db.query(Building).filter(
         Building.copro_id == building.copro_id,
-        Building.identifier == building.identifier
+        Building.name == building.name
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail=f"Un bâtiment avec l'identifiant '{building.identifier}' existe déjà")
+        raise HTTPException(status_code=400, detail=f"Un bâtiment avec le nom '{building.name}' existe déjà")
     
     db_building = Building(**building.dict())
     db.add(db_building)
@@ -169,7 +168,7 @@ async def list_buildings(copro_id: int, db: Session = Depends(get_db)):
     buildings = db.query(Building).filter(
         Building.copro_id == copro_id,
         Building.is_active == True
-    ).order_by(Building.order, Building.identifier).all()
+    ).order_by(Building.order, Building.name).all()
     return buildings
 
 

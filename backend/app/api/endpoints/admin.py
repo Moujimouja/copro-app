@@ -8,7 +8,7 @@ API endpoints pour les administrateurs
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from app.db import get_db
 from app.models.copro import Copro, Building, ServiceType, ServiceInstance
@@ -63,7 +63,6 @@ class ServiceInstanceResponse(BaseModel):
     order: int
     building_name: str
     service_type_name: str
-    building_identifier: str
 
     class Config:
         from_attributes = True
@@ -281,15 +280,13 @@ async def update_copro(
 # ============ Gestion des Bâtiments et Types de Services ============
 
 class BuildingCreate(BaseModel):
-    identifier: str
-    name: Optional[str] = None
+    name: str  # Nom unique du bâtiment
     description: Optional[str] = None
     order: int = 0
 
 
 class BuildingUpdate(BaseModel):
-    identifier: Optional[str] = None
-    name: Optional[str] = None
+    name: Optional[str] = None  # Nom unique du bâtiment
     description: Optional[str] = None
     order: Optional[int] = None
     is_active: Optional[bool] = None
@@ -298,8 +295,7 @@ class BuildingUpdate(BaseModel):
 class BuildingResponse(BaseModel):
     id: int
     copro_id: int
-    identifier: str
-    name: Optional[str]
+    name: str  # Nom unique du bâtiment
     description: Optional[str]
     order: int
     is_active: bool
@@ -322,7 +318,7 @@ async def list_buildings(
     
     buildings = db.query(Building).filter(
         Building.copro_id == copro.id
-    ).order_by(Building.order, Building.identifier).all()
+    ).order_by(Building.order, Building.name).all()
     
     return buildings
 
@@ -351,17 +347,16 @@ async def create_building(
     if not copro:
         raise HTTPException(status_code=404, detail="Aucune copropriété configurée")
     
-    # Vérifier l'unicité de l'identifiant dans la copropriété
+    # Vérifier l'unicité du nom dans la copropriété
     existing = db.query(Building).filter(
         Building.copro_id == copro.id,
-        Building.identifier == building.identifier
+        Building.name == building.name
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail=f"Un bâtiment avec l'identifiant '{building.identifier}' existe déjà")
+        raise HTTPException(status_code=400, detail=f"Un bâtiment avec le nom '{building.name}' existe déjà")
     
     db_building = Building(
         copro_id=copro.id,
-        identifier=building.identifier,
         name=building.name,
         description=building.description,
         order=building.order
@@ -388,15 +383,15 @@ async def update_building(
     
     update_data = building_update.dict(exclude_unset=True)
     
-    # Vérifier l'unicité de l'identifiant si modifié
-    if 'identifier' in update_data and update_data['identifier'] != building.identifier:
+    # Vérifier l'unicité du nom si modifié
+    if 'name' in update_data and update_data['name'] != building.name:
         existing = db.query(Building).filter(
             Building.copro_id == building.copro_id,
-            Building.identifier == update_data['identifier'],
+            Building.name == update_data['name'],
             Building.id != building_id
         ).first()
         if existing:
-            raise HTTPException(status_code=400, detail=f"Un bâtiment avec l'identifiant '{update_data['identifier']}' existe déjà")
+            raise HTTPException(status_code=400, detail=f"Un bâtiment avec le nom '{update_data['name']}' existe déjà")
     
     # Appliquer les mises à jour
     for field, value in update_data.items():
@@ -501,8 +496,7 @@ async def list_service_instances(
             is_active=instance.is_active,
             order=instance.order,
             building_name=instance.building.name if instance.building else "",
-            service_type_name=instance.service_type.name if instance.service_type else "",
-            building_identifier=instance.building.identifier if instance.building else ""
+            service_type_name=instance.service_type.name if instance.service_type else ""
         ))
     
     return result
@@ -533,8 +527,7 @@ async def get_service_instance(
         is_active=instance.is_active,
         order=instance.order,
         building_name=instance.building.name if instance.building else "",
-        service_type_name=instance.service_type.name if instance.service_type else "",
-        building_identifier=instance.building.identifier if instance.building else ""
+        service_type_name=instance.service_type.name if instance.service_type else ""
     )
 
 
@@ -608,8 +601,7 @@ async def create_service_instance(
         is_active=db_service_instance.is_active,
         order=db_service_instance.order,
         building_name=db_service_instance.building.name if db_service_instance.building else "",
-        service_type_name=db_service_instance.service_type.name if db_service_instance.service_type else "",
-        building_identifier=db_service_instance.building.identifier if db_service_instance.building else ""
+        service_type_name=db_service_instance.service_type.name if db_service_instance.service_type else ""
     )
 
 
@@ -686,8 +678,7 @@ async def update_service_instance(
         is_active=instance.is_active,
         order=instance.order,
         building_name=instance.building.name if instance.building else "",
-        service_type_name=instance.service_type.name if instance.service_type else "",
-        building_identifier=instance.building.identifier if instance.building else ""
+        service_type_name=instance.service_type.name if instance.service_type else ""
     )
 
 
@@ -825,7 +816,7 @@ async def get_incident(
             "id": comment.id,
             "comment": comment.comment,
             "admin_id": comment.admin_id,
-            "admin_username": comment.admin.username if comment.admin else None,
+            "admin_email": comment.admin.email if comment.admin else None,
             "created_at": comment.created_at.isoformat() if comment.created_at else None,
         })
     
@@ -947,7 +938,7 @@ async def add_incident_comment(
         "message": "Commentaire ajouté",
         "comment_id": comment.id,
         "comment": comment.comment,
-        "admin_username": admin.username,
+        "admin_email": admin.email,
         "created_at": comment.created_at.isoformat() if comment.created_at else None
     }
 
@@ -963,9 +954,9 @@ async def list_admins(
     admins = db.query(User).filter(
         User.is_superuser == True,
         User.is_active == True
-    ).order_by(User.username).all()
+    ).order_by(User.email).all()
     
-    return [{"id": a.id, "username": a.username, "email": a.email} for a in admins]
+    return [{"id": a.id, "email": a.email} for a in admins]
 
 
 # ============ Gestion des Tickets ============
@@ -1005,10 +996,10 @@ async def list_tickets(
             "service_instance_id": ticket.service_instance_id,
             "copro": ticket.copro.name if ticket.copro else None,
             "assigned_to": ticket.assigned_to,
-            "assigned_admin": ticket.assigned_admin.username if ticket.assigned_admin else None,
+            "assigned_admin": ticket.assigned_admin.email if ticket.assigned_admin else None,
             "admin_notes": ticket.admin_notes,
             "reviewed_by": ticket.reviewed_by,
-            "reviewer": ticket.reviewer.username if ticket.reviewer else None,
+            "reviewer": ticket.reviewer.email if ticket.reviewer else None,
             "incident_id": ticket.incident_id,
             "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
             "reviewed_at": ticket.reviewed_at.isoformat() if ticket.reviewed_at else None,
@@ -1116,8 +1107,7 @@ async def reject_ticket(
 # ============ Gestion des Utilisateurs ============
 
 class UserCreate(BaseModel):
-    username: str
-    email: str
+    email: EmailStr
     password: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -1129,8 +1119,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    username: Optional[str] = None
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     password: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -1143,7 +1132,6 @@ class UserUpdate(BaseModel):
 
 class UserResponse(BaseModel):
     id: int
-    username: str
     email: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -1171,7 +1159,6 @@ async def list_users(
     for user in users:
         user_dict = {
             "id": user.id,
-            "username": user.username,
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
@@ -1186,7 +1173,7 @@ async def list_users(
         }
         if user.building:
             user_dict["building_name"] = user.building.name
-            user_dict["building_identifier"] = user.building.identifier
+            user_dict["building_identifier"] = user.building.name
         result.append(user_dict)
     return result
 
@@ -1204,7 +1191,6 @@ async def get_user(
     
     user_dict = {
         "id": user.id,
-        "username": user.username,
         "email": user.email,
         "first_name": user.first_name,
         "last_name": user.last_name,
@@ -1219,7 +1205,7 @@ async def get_user(
     }
     if user.building:
         user_dict["building_name"] = user.building.name
-        user_dict["building_identifier"] = user.building.identifier
+        user_dict["building_identifier"] = user.building.name
     return user_dict
 
 
@@ -1230,11 +1216,6 @@ async def create_user(
     admin: User = Depends(get_admin_user)
 ):
     """Créer un nouvel utilisateur (admin uniquement)"""
-    # Vérifier que l'username n'existe pas déjà
-    existing_user = db.query(User).filter(User.username == user_data.username).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Ce nom d'utilisateur existe déjà")
-    
     # Vérifier que l'email n'existe pas déjà
     existing_email = db.query(User).filter(User.email == user_data.email).first()
     if existing_email:
@@ -1254,7 +1235,6 @@ async def create_user(
     # Créer l'utilisateur
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
-        username=user_data.username,
         email=user_data.email,
         hashed_password=hashed_password,
         first_name=user_data.first_name,
@@ -1273,7 +1253,6 @@ async def create_user(
     
     user_dict = {
         "id": new_user.id,
-        "username": new_user.username,
         "email": new_user.email,
         "first_name": new_user.first_name,
         "last_name": new_user.last_name,
@@ -1288,7 +1267,7 @@ async def create_user(
     }
     if new_user.building:
         user_dict["building_name"] = new_user.building.name
-        user_dict["building_identifier"] = new_user.building.identifier
+        user_dict["building_identifier"] = new_user.building.name
     
     return user_dict
 
@@ -1304,13 +1283,6 @@ async def update_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-    # Vérifier que l'username n'existe pas déjà (si modifié)
-    if user_data.username and user_data.username != user.username:
-        existing_user = db.query(User).filter(User.username == user_data.username).first()
-        if existing_user:
-            raise HTTPException(status_code=400, detail="Ce nom d'utilisateur existe déjà")
-        user.username = user_data.username
     
     # Vérifier que l'email n'existe pas déjà (si modifié)
     if user_data.email and user_data.email != user.email:
@@ -1350,7 +1322,6 @@ async def update_user(
     
     user_dict = {
         "id": user.id,
-        "username": user.username,
         "email": user.email,
         "first_name": user.first_name,
         "last_name": user.last_name,
@@ -1365,7 +1336,7 @@ async def update_user(
     }
     if user.building:
         user_dict["building_name"] = user.building.name
-        user_dict["building_identifier"] = user.building.identifier
+        user_dict["building_identifier"] = user.building.name
     
     return user_dict
 

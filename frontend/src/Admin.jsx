@@ -19,7 +19,6 @@ function Admin() {
   const [showUserForm, setShowUserForm] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [userFormData, setUserFormData] = useState({
-    username: '',
     email: '',
     password: '',
     first_name: '',
@@ -54,7 +53,6 @@ function Admin() {
   const [showBuildingForm, setShowBuildingForm] = useState(false)
   const [editingBuilding, setEditingBuilding] = useState(null)
   const [buildingFormData, setBuildingFormData] = useState({
-    identifier: '',
     name: '',
     description: '',
     order: 0
@@ -739,7 +737,6 @@ function Admin() {
   const openCreateBuildingForm = () => {
     setEditingBuilding(null)
     setBuildingFormData({
-      identifier: '',
       name: '',
       description: '',
       order: 0
@@ -750,7 +747,6 @@ function Admin() {
   const openEditBuildingForm = (building) => {
     setEditingBuilding(building)
     setBuildingFormData({
-      identifier: building.identifier,
       name: building.name || '',
       description: building.description || '',
       order: building.order || 0
@@ -933,7 +929,6 @@ function Admin() {
   const openCreateUserForm = () => {
     setEditingUser(null)
     setUserFormData({
-      username: '',
       email: '',
       password: '',
       first_name: '',
@@ -950,14 +945,13 @@ function Admin() {
   const openEditUserForm = (user) => {
     setEditingUser(user)
     setUserFormData({
-      username: user.username,
       email: user.email,
       password: '', // Ne pas pré-remplir le mot de passe
       first_name: user.first_name || '',
       last_name: user.last_name || '',
       lot_number: user.lot_number || '',
       floor: user.floor || '',
-      building_id: user.building_id || '',
+      building_id: user.building_id || null,
       is_active: user.is_active,
       is_superuser: user.is_superuser
     })
@@ -1143,7 +1137,7 @@ function Admin() {
                       <option value="">Sélectionner un bâtiment</option>
                       {buildings.map(building => (
                         <option key={building.id} value={building.id}>
-                          {building.identifier} - {building.name}
+                          {building.name}
                         </option>
                       ))}
                     </select>
@@ -1517,25 +1511,14 @@ function Admin() {
                 </div>
                 <form onSubmit={handleSubmitBuilding} className="equipment-form">
                   <div className="form-group">
-                    <label>Identifiant * (A, B, 1, 2, etc.)</label>
-                    <input
-                      type="text"
-                      name="identifier"
-                      value={buildingFormData.identifier}
-                      onChange={handleBuildingFormChange}
-                      required
-                      placeholder="Ex: A, B, 1, 2"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Nom</label>
+                    <label>Nom * (unique)</label>
                     <input
                       type="text"
                       name="name"
                       value={buildingFormData.name}
                       onChange={handleBuildingFormChange}
-                      placeholder="Ex: Bâtiment Principal"
+                      required
+                      placeholder="Ex: Bâtiment A, Bâtiment B"
                     />
                   </div>
 
@@ -1578,7 +1561,7 @@ function Admin() {
               <div key={building.id} className="building-card">
                 <div className="building-header">
                   <div>
-                    <h3>{building.identifier} {building.name && `- ${building.name}`}</h3>
+                    <h3>{building.name}</h3>
                     {building.description && (
                       <p className="building-description">{building.description}</p>
                     )}
@@ -1652,7 +1635,7 @@ function Admin() {
                       >
                         <option value="">Assigner à...</option>
                         {admins.map(admin => (
-                          <option key={admin.id} value={admin.id}>{admin.username}</option>
+                          <option key={admin.id} value={admin.id}>{admin.email}</option>
                         ))}
                       </select>
                       <button
@@ -1794,7 +1777,7 @@ function Admin() {
                         selectedIncident.comments.map(comment => (
                           <div key={comment.id} className="comment-item">
                             <div className="comment-header">
-                              <strong>{comment.admin_username}</strong>
+                              <strong>{comment.admin_email || 'Admin'}</strong>
                               <span className="comment-date">
                                 {new Date(comment.created_at).toLocaleString('fr-FR')}
                               </span>
@@ -1871,17 +1854,6 @@ function Admin() {
                 </div>
                 <form onSubmit={handleSubmitUser} className="equipment-form">
                   <div className="form-group">
-                    <label>Nom d'utilisateur *</label>
-                    <input
-                      type="text"
-                      name="username"
-                      value={userFormData.username}
-                      onChange={handleUserFormChange}
-                      required
-                      placeholder="Ex: jdupont"
-                    />
-                  </div>
-                  <div className="form-group">
                     <label>Email *</label>
                     <input
                       type="email"
@@ -1953,7 +1925,7 @@ function Admin() {
                       <option value="">Aucun</option>
                       {buildings.map(building => (
                         <option key={building.id} value={building.id}>
-                          {building.identifier} - {building.name}
+                          {building.name}
                         </option>
                       ))}
                     </select>
@@ -1997,7 +1969,6 @@ function Admin() {
             <table className="equipments-table">
               <thead>
                 <tr>
-                  <th>Nom d'utilisateur</th>
                   <th>Email</th>
                   <th>Nom</th>
                   <th>Prénom</th>
@@ -2011,13 +1982,12 @@ function Admin() {
               <tbody>
                 {users.map(user => (
                   <tr key={user.id} className={`equipment-row ${user.is_active ? 'status-operational' : 'status-maintenance'}`}>
-                    <td className="equipment-name">{user.username}</td>
-                    <td>{user.email}</td>
+                    <td className="equipment-name">{user.email}</td>
                     <td>{user.last_name || '-'}</td>
                     <td>{user.first_name || '-'}</td>
                     <td>{user.lot_number || '-'}</td>
                     <td>{user.floor || '-'}</td>
-                    <td>{user.building_name ? `${user.building_identifier} - ${user.building_name}` : '-'}</td>
+                    <td>{user.building_name || '-'}</td>
                     <td>
                       <span className={`status-badge ${user.is_active ? 'status-operational' : 'status-maintenance'}`}>
                         {user.is_active ? 'Actif' : 'Inactif'}
@@ -2035,7 +2005,7 @@ function Admin() {
                         </button>
                         <button
                           onClick={() => {
-                            if (window.confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${user.username}" ?`)) {
+                            if (window.confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${user.email}" ?`)) {
                               handleDeleteUser(user.id)
                             }
                           }}

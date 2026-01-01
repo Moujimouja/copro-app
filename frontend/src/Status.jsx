@@ -180,7 +180,7 @@ function Status() {
             const allOperational = statusData.services.every(s => s.status === 'operational')
             
             statusData.services.forEach(service => {
-              const buildingKey = service.building_identifier || service.building_name || 'Commun'
+              const buildingKey = service.building_name || 'Commun'
               const typeKey = service.service_type_name || 'Autre'
               
               if (!groupedServices[buildingKey]) {

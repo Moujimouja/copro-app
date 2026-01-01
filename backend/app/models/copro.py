@@ -32,13 +32,12 @@ class Copro(Base):
 
 
 class Building(Base):
-    """Bâtiment dans une copropriété (A, B, 1, 2, etc.)"""
+    """Bâtiment dans une copropriété"""
     __tablename__ = "buildings"
 
     id = Column(Integer, primary_key=True, index=True)
     copro_id = Column(Integer, ForeignKey("copros.id"), nullable=False, index=True)
-    identifier = Column(String, nullable=False)  # A, B, 1, 2, etc.
-    name = Column(String, nullable=True)  # Nom optionnel (ex: "Bâtiment Principal")
+    name = Column(String, nullable=False)  # Nom unique du bâtiment (ex: "Bâtiment A", "Bâtiment B")
     description = Column(Text, nullable=True)
     
     # Configuration
@@ -53,9 +52,9 @@ class Building(Base):
     copro = relationship("Copro", back_populates="buildings")
     service_instances = relationship("ServiceInstance", back_populates="building", cascade="all, delete-orphan")
 
-    # Unique constraint: un identifiant unique par copropriété
+    # Unique constraint: un nom unique par copropriété
     __table_args__ = (
-        Index('ix_buildings_copro_identifier', 'copro_id', 'identifier', unique=True),
+        Index('ix_buildings_copro_name', 'copro_id', 'name', unique=True),
     )
 
 

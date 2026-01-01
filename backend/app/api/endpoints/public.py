@@ -86,7 +86,7 @@ async def get_public_service_instances(db: Session = Depends(get_db)):
         result.append({
             "id": instance.id,
             "name": instance.name,
-            "building": instance.building.identifier if instance.building else "",
+            "building": instance.building.name if instance.building else "",
             "service_type": instance.service_type.name if instance.service_type else "",
             "status": instance.status
         })
@@ -105,13 +105,12 @@ async def get_public_buildings(db: Session = Depends(get_db)):
     buildings = db.query(Building).filter(
         Building.copro_id == copro.id,
         Building.is_active == True
-    ).order_by(Building.order, Building.identifier).all()
+    ).order_by(Building.order, Building.name).all()
     
     result = []
     for building in buildings:
         result.append({
             "id": building.id,
-            "identifier": building.identifier,
             "name": building.name
         })
     

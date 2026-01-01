@@ -33,9 +33,9 @@ def create_sample_copro():
         
         # 2. Créer les bâtiments
         buildings_data = [
-            {"identifier": "A", "name": "Bâtiment A", "order": 1},
-            {"identifier": "B", "name": "Bâtiment B", "order": 2},
-            {"identifier": "C", "name": "Bâtiment C", "order": 3},
+            {"name": "Bâtiment A", "order": 1},
+            {"name": "Bâtiment B", "order": 2},
+            {"name": "Bâtiment C", "order": 3},
         ]
         
         buildings = []
@@ -50,7 +50,7 @@ def create_sample_copro():
         db.commit()
         for building in buildings:
             db.refresh(building)
-            print(f"✅ Bâtiment créé: {building.identifier} - {building.name} (ID: {building.id})")
+            print(f"✅ Bâtiment créé: {building.name} (ID: {building.id})")
         
         # 3. Créer les types de services
         service_types_data = [
@@ -124,8 +124,10 @@ def create_sample_copro():
         for building in buildings:
             for service_type in service_types:
                 # Nom du service: "Type - Bâtiment X"
-                service_name = f"{service_type.name} - Bâtiment {building.identifier}"
-                identifier = f"{service_type.name[:3].upper()}-{building.identifier}"
+                # Utiliser le nom du bâtiment pour créer un identifiant unique
+                building_short = building.name.replace("Bâtiment ", "").replace(" ", "")
+                service_name = f"{service_type.name} - {building.name}"
+                identifier = f"{service_type.name[:3].upper()}-{building_short}"
                 
                 service_instance = ServiceInstance(
                     copro_id=copro.id,
@@ -133,8 +135,8 @@ def create_sample_copro():
                     service_type_id=service_type.id,
                     name=service_name,
                     identifier=identifier,
-                    description=f"{service_type.description} du bâtiment {building.identifier}",
-                    location=f"Bâtiment {building.identifier}",
+                    description=f"{service_type.description}",
+                    location=None,
                     status=service_type.default_status,
                     order=service_type.order
                 )
@@ -185,11 +187,10 @@ def create_custom_copro(name: str, buildings: list, service_types: list):
         
         # Créer les bâtiments
         db_buildings = []
-        for idx, building_id in enumerate(buildings):
+        for idx, building_name in enumerate(buildings):
             building = Building(
                 copro_id=copro.id,
-                identifier=building_id,
-                name=f"Bâtiment {building_id}",
+                name=building_name if building_name.startswith("Bâtiment") else f"Bâtiment {building_name}",
                 order=idx + 1
             )
             db.add(building)
@@ -225,8 +226,8 @@ def create_custom_copro(name: str, buildings: list, service_types: list):
                     copro_id=copro.id,
                     building_id=building.id,
                     service_type_id=service_type.id,
-                    name=f"{service_type.name} - Bâtiment {building.identifier}",
-                    identifier=f"{service_type.name[:3].upper()}-{building.identifier}",
+                    name=f"{service_type.name} - {building.name}",
+                    identifier=f"{service_type.name[:3].upper()}-{building.name.replace('Bâtiment ', '').replace(' ', '')}",
                     status=service_type.default_status
                 )
                 db.add(service_instance)

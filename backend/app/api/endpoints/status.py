@@ -19,7 +19,6 @@ class ServiceResponse(BaseModel):
     status: str
     order: int
     building_id: Optional[int] = None
-    building_identifier: Optional[str] = None
     building_name: Optional[str] = None
     service_type_id: Optional[int] = None
     service_type_name: Optional[str] = None
@@ -189,7 +188,6 @@ async def get_status_page(db: Session = Depends(get_db)):
             status=si.status,
             order=si.order,
             building_id=si.building_id,
-            building_identifier=si.building.identifier if si.building else None,
             building_name=si.building.name if si.building else None,
             service_type_id=si.service_type_id,
             service_type_name=si.service_type.name if si.service_type else None

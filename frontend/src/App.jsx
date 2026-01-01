@@ -298,7 +298,7 @@ function Login() {
                 <option value="">Sélectionner un bâtiment</option>
                 {buildings.map(building => (
                   <option key={building.id} value={building.id}>
-                    {building.identifier} - {building.name}
+                    {building.name}
                   </option>
                 ))}
               </select>

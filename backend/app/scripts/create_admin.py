@@ -32,41 +32,14 @@ def create_admin():
             existing_admin.hashed_password = get_password_hash("admin123")
             existing_admin.is_superuser = True
             existing_admin.is_active = True
-            # Générer un username si nécessaire
-            if not existing_admin.username:
-                existing_admin.username = "admin"
             db.commit()
             print("✅ Mot de passe de l'admin réinitialisé")
             print(f"   Email: admin@admin.com")
             print(f"   Password: admin123")
             return
         
-        # Vérifier si un utilisateur avec le username "admin" existe déjà
-        existing_username = db.query(User).filter(User.username == "admin").first()
-        if existing_username:
-            print("⚠️  Un utilisateur existe déjà avec le username 'admin'")
-            print("   Mise à jour de l'email et réinitialisation du mot de passe...")
-            existing_username.email = "admin@admin.com"
-            existing_username.hashed_password = get_password_hash("admin123")
-            existing_username.is_superuser = True
-            existing_username.is_active = True
-            db.commit()
-            print("✅ Compte admin mis à jour")
-            print(f"   Email: admin@admin.com")
-            print(f"   Password: admin123")
-            return
-        
-        # Générer un username unique si "admin" est déjà pris
-        base_username = "admin"
-        counter = 1
-        username = base_username
-        while db.query(User).filter(User.username == username).first():
-            username = f"{base_username}{counter}"
-            counter += 1
-        
         # Créer le compte admin
         admin = User(
-            username=username,
             email="admin@admin.com",
             hashed_password=get_password_hash("admin123"),
             is_superuser=True,
@@ -82,8 +55,6 @@ def create_admin():
         print("="*50)
         print(f"Email: admin@admin.com")
         print(f"Password: admin123")
-        if username != "admin":
-            print(f"Username: {username} (généré automatiquement)")
         print("="*50)
         print("\n⚠️  IMPORTANT: Changez le mot de passe après la première connexion!")
         
