@@ -9,11 +9,15 @@ from app.db import Base
 
 
 class TicketStatus(PyEnum):
-    PENDING = "pending"  # En attente d'analyse
-    REVIEWING = "reviewing"  # En cours d'analyse
-    APPROVED = "approved"  # Approuvé, incident créé
-    REJECTED = "rejected"  # Rejeté
+    ANALYZING = "analyzing"  # En cours d'analyse
+    IN_PROGRESS = "in_progress"  # En cours de traitement
     RESOLVED = "resolved"  # Résolu
+    CLOSED = "closed"  # Clos
+
+
+class TicketType(PyEnum):
+    INCIDENT = "incident"  # Incident
+    REQUEST = "request"  # Demande
 
 
 class Ticket(Base):
@@ -37,9 +41,12 @@ class Ticket(Base):
     # Photos/pièces jointes (stockées en JSON ou chemins)
     attachments = Column(Text, nullable=True)  # JSON array de chemins
     
+    # Type de ticket
+    type = Column(SQLEnum(TicketType), default=TicketType.INCIDENT, nullable=False)
+    
     # Statut et gestion
-    status = Column(SQLEnum(TicketStatus), default=TicketStatus.PENDING, nullable=False)
-    admin_notes = Column(Text, nullable=True)  # Notes de l'admin
+    status = Column(SQLEnum(TicketStatus), default=TicketStatus.ANALYZING, nullable=False)
+    admin_notes = Column(Text, nullable=True)  # Notes de l'admin (deprecated, utiliser TicketComment)
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # Admin assigné
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Admin qui a traité
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
@@ -57,5 +64,6 @@ class Ticket(Base):
     assigned_admin = relationship("User", foreign_keys=[assigned_to])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     incident = relationship("Incident", foreign_keys=[incident_id])
+    comments = relationship("TicketComment", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketComment.created_at")
 
 

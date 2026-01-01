@@ -13,7 +13,8 @@ from datetime import datetime
 from app.db import get_db
 from app.models.copro import Copro, Building, ServiceInstance
 from app.models.status import Incident, IncidentUpdate, IncidentComment, IncidentStatus
-from app.models.ticket import Ticket, TicketStatus
+from app.models.ticket import Ticket, TicketStatus, TicketType
+from app.models.ticket_comment import TicketComment
 from app.models.user import User
 from app.models.maintenance import Maintenance
 from app.auth import get_current_user, get_password_hash
@@ -80,13 +81,21 @@ class IncidentUpdateCreate(BaseModel):
 
 
 class TicketReview(BaseModel):
-    status: str  # approved, rejected
-    admin_notes: Optional[str] = None
+    status: str  # approved, rejected (deprecated, utiliser update_status)
+    admin_notes: Optional[str] = None  # Deprecated, utiliser les commentaires
     create_incident: bool = False  # Si True, créer un incident automatiquement
 
 
 class TicketAssign(BaseModel):
     assigned_to: int  # ID de l'administrateur
+
+
+class TicketStatusUpdate(BaseModel):
+    status: str  # analyzing, in_progress, resolved, closed
+
+
+class TicketCommentCreate(BaseModel):
+    comment: str
 
 
 class IncidentStatusUpdate(BaseModel):
@@ -869,11 +878,23 @@ async def list_tickets(
     
     result = []
     for ticket in tickets:
-        db.refresh(ticket, ['service_instance', 'copro', 'assigned_admin', 'reviewer', 'incident'])
+        db.refresh(ticket, ['service_instance', 'copro', 'assigned_admin', 'reviewer', 'incident', 'comments'])
+        # Récupérer les commentaires
+        comments = []
+        for comment in ticket.comments:
+            db.refresh(comment, ['admin'])
+            comments.append({
+                "id": comment.id,
+                "comment": comment.comment,
+                "admin_email": comment.admin.email if comment.admin else None,
+                "created_at": comment.created_at.isoformat() if comment.created_at else None
+            })
+        
         result.append({
             "id": ticket.id,
             "title": ticket.title,
             "description": ticket.description,
+            "type": ticket.type.value if ticket.type else "incident",
             "status": ticket.status.value,
             "reporter_name": ticket.reporter_name,
             "reporter_email": ticket.reporter_email,
@@ -888,6 +909,7 @@ async def list_tickets(
             "reviewed_by": ticket.reviewed_by,
             "reviewer": ticket.reviewer.email if ticket.reviewer else None,
             "incident_id": ticket.incident_id,
+            "comments": comments,
             "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
             "reviewed_at": ticket.reviewed_at.isoformat() if ticket.reviewed_at else None,
         })
@@ -916,7 +938,7 @@ async def assign_ticket(
         raise HTTPException(status_code=404, detail="Administrateur non trouvé")
     
     ticket.assigned_to = assign_data.assigned_to
-    ticket.status = TicketStatus.REVIEWING
+    ticket.status = TicketStatus.ANALYZING
     db.commit()
     db.refresh(ticket)
     
@@ -935,13 +957,24 @@ async def review_ticket(
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trouvé")
     
-    ticket.status = TicketStatus(review.status)
-    ticket.admin_notes = review.admin_notes
+    # Mapper les anciens statuts vers les nouveaux si nécessaire
+    if review.status == "approved":
+        ticket.status = TicketStatus.IN_PROGRESS
+    elif review.status == "rejected":
+        ticket.status = TicketStatus.CLOSED
+    else:
+        try:
+            ticket.status = TicketStatus(review.status)
+        except ValueError:
+            ticket.status = TicketStatus.ANALYZING
+    
+    if review.admin_notes:
+        ticket.admin_notes = review.admin_notes
     ticket.reviewed_by = admin.id
     ticket.reviewed_at = datetime.utcnow()
     
     # Si approuvé et demande de création d'incident
-    if review.status == "approved" and review.create_incident:
+    if (review.status == "approved" or ticket.status == TicketStatus.IN_PROGRESS) and review.create_incident:
         incident = Incident(
             copro_id=ticket.copro_id,
             service_instance_id=ticket.service_instance_id,
@@ -953,6 +986,15 @@ async def review_ticket(
         db.flush()
         
         ticket.incident_id = incident.id
+        
+        # Copier les commentaires du ticket vers l'incident
+        for ticket_comment in ticket.comments:
+            incident_comment = IncidentComment(
+                incident_id=incident.id,
+                admin_id=ticket_comment.admin_id,
+                comment=f"[Depuis ticket #{ticket.id}] {ticket_comment.comment}"
+            )
+            db.add(incident_comment)
         
         # Mettre à jour le statut du service si spécifié
         if ticket.service_instance_id:
@@ -975,13 +1017,14 @@ async def reject_ticket(
     db: Session = Depends(get_db),
     admin: User = Depends(get_admin_user)
 ):
-    """Rejeter un ticket (admin uniquement)"""
+    """Rejeter un ticket (admin uniquement) - DEPRECATED, utiliser update_status"""
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trouvé")
     
-    ticket.status = TicketStatus.REJECTED
-    ticket.admin_notes = admin_notes
+    ticket.status = TicketStatus.CLOSED
+    if admin_notes:
+        ticket.admin_notes = admin_notes
     ticket.reviewed_by = admin.id
     ticket.reviewed_at = datetime.utcnow()
     
@@ -989,6 +1032,88 @@ async def reject_ticket(
     db.refresh(ticket)
     
     return {"message": "Ticket rejeté", "ticket_id": ticket.id}
+
+
+@router.patch("/tickets/{ticket_id}/status")
+async def update_ticket_status(
+    ticket_id: int,
+    status_update: TicketStatusUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Mettre à jour le statut d'un ticket (admin uniquement)"""
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    
+    try:
+        ticket.status = TicketStatus(status_update.status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Statut invalide")
+    
+    db.commit()
+    db.refresh(ticket)
+    
+    return {"message": "Statut mis à jour", "ticket_id": ticket.id, "status": ticket.status.value}
+
+
+@router.post("/tickets/{ticket_id}/comments", status_code=status.HTTP_201_CREATED)
+async def add_ticket_comment(
+    ticket_id: int,
+    comment_data: TicketCommentCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Ajouter un commentaire à un ticket (admin uniquement)"""
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    
+    comment = TicketComment(
+        ticket_id=ticket_id,
+        admin_id=admin.id,
+        comment=comment_data.comment
+    )
+    
+    db.add(comment)
+    db.commit()
+    db.refresh(comment, ['admin'])
+    
+    return {
+        "message": "Commentaire ajouté",
+        "comment_id": comment.id,
+        "comment": comment.comment,
+        "admin_email": admin.email,
+        "created_at": comment.created_at.isoformat() if comment.created_at else None
+    }
+
+
+@router.get("/tickets/{ticket_id}/comments")
+async def get_ticket_comments(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Récupérer les commentaires d'un ticket (admin uniquement)"""
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    
+    comments = db.query(TicketComment).filter(
+        TicketComment.ticket_id == ticket_id
+    ).order_by(TicketComment.created_at).all()
+    
+    result = []
+    for comment in comments:
+        db.refresh(comment, ['admin'])
+        result.append({
+            "id": comment.id,
+            "comment": comment.comment,
+            "admin_email": comment.admin.email if comment.admin else None,
+            "created_at": comment.created_at.isoformat() if comment.created_at else None
+        })
+    
+    return result
 
 
 # ============ Gestion des Utilisateurs ============

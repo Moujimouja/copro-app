@@ -4,7 +4,7 @@ from app.core.config import settings
 from app.db import engine, Base, SessionLocal
 from app.api import api_router
 # Import models to ensure tables are created
-from app.models import User, Service, Incident, IncidentUpdate, IncidentComment, Copro, Building, ServiceInstance, Ticket, Maintenance
+from app.models import User, Service, Incident, IncidentUpdate, IncidentComment, Copro, Building, ServiceInstance, Ticket, TicketComment, Maintenance
 import os
 
 # Create database tables
@@ -30,7 +30,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins + ["http://127.0.0.1:5173"],  # Include settings + localhost variants
+    allow_origins=settings.cors_origins + ["http://127.0.0.1:5173", "http://localhost:5173"],  # Include settings + localhost variants
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

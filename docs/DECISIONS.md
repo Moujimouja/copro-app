@@ -163,3 +163,4 @@ This document records the architectural decisions made for the Copro App project
 **Future**: Migrate to Alembic for production-ready migrations.
 
 
+
