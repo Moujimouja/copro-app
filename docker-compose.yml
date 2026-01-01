@@ -1,60 +1,70 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: copro-app-postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: coproapp
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: copro-app-backend
+    container_name: copro-backend
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
-      - ./backend/app:/app/app
+      - ./backend:/app
+      - /app/__pycache__
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://copro:copro_password@db:5432/copro_app
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/coproapp
-      - SECRET_KEY=your-secret-key-change-in-production
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: copro-app-frontend
+    container_name: copro-frontend
     volumes:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - "3000:3000"
+      - "5173:5173"
     environment:
       - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
 
-volumes:
-  postgres_data:
+  db:
+    image: postgres:15
+    restart: always
+    container_name: copro-db
+    environment:
+      POSTGRES_USER: copro
+      POSTGRES_PASSWORD: copro_password
+      POSTGRES_DB: copro_app
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U copro -d copro_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  adminer:
+    image: adminer
+    restart: always
+    container_name: copro-adminer
+    ports:
+      - "8080:8080"
+
+volumes:
+  db_data:
