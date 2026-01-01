@@ -1,27 +1,11 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
+import Status from './Status'
+import Admin from './Admin'
+import ReportIncident from './ReportIncident'
 import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-function Home() {
-  const [health, setHealth] = useState(null)
-
-  useEffect(() => {
-    fetch(`${API_URL}/health`)
-      .then(res => res.json())
-      .then(data => setHealth(data))
-      .catch(err => console.error('Health check failed:', err))
-  }, [])
-
-  return (
-    <div className="home">
-      <h1>Welcome to Copro App</h1>
-      <p>Backend Status: {health ? '✅ Connected' : '❌ Disconnected'}</p>
-      {health && <pre>{JSON.stringify(health, null, 2)}</pre>}
-    </div>
-  )
-}
 
 function Login() {
   const [username, setUsername] = useState('')
@@ -44,6 +28,10 @@ function Login() {
         const data = await response.json()
         localStorage.setItem('token', data.access_token)
         setMessage('Login successful!')
+        // Rediriger après connexion
+        setTimeout(() => {
+          window.location.href = '/admin'
+        }, 1000)
       } else {
         setMessage('Login failed')
       }
@@ -82,16 +70,42 @@ function Login() {
 }
 
 function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'))
+
+  useEffect(() => {
+    // Vérifier si l'utilisateur est connecté
+    const token = localStorage.getItem('token')
+    setIsLoggedIn(!!token)
+  }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    setIsLoggedIn(false)
+  }
+
   return (
     <Router>
       <div className="app">
         <nav>
-          <Link to="/">Home</Link>
-          <Link to="/login">Login</Link>
+          <div className="nav-left">
+            <Link to="/status">Copro Status</Link>
+            <Link to="/report">Déclarer un incident</Link>
+            {isLoggedIn && <Link to="/admin">Admin</Link>}
+          </div>
+          <div className="nav-right">
+            {isLoggedIn ? (
+              <button onClick={handleLogout} className="btn-logout">Déconnexion</button>
+            ) : (
+              <Link to="/login">Login</Link>
+            )}
+          </div>
         </nav>
         <main>
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<Status />} />
+            <Route path="/status" element={<Status />} />
+            <Route path="/report" element={<ReportIncident />} />
+            <Route path="/admin" element={<Admin />} />
             <Route path="/login" element={<Login />} />
           </Routes>
         </main>

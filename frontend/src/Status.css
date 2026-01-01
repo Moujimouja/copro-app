@@ -1,0 +1,304 @@
+.status-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.status-header {
+  text-align: center;
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.status-header h1 {
+  font-size: 2.5rem;
+  color: #1f2937;
+  margin-bottom: 1rem;
+}
+
+.overall-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.status-indicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-operational .status-indicator {
+  background-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.status-degraded .status-indicator {
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.status-partial .status-indicator {
+  background-color: #f97316;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.5);
+}
+
+.status-major .status-indicator {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+.status-maintenance .status-indicator {
+  background-color: #6366f1;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+}
+
+.status-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.services-section h2,
+.incidents-section h2 {
+  font-size: 1.75rem;
+  color: #1f2937;
+  margin-bottom: 1.5rem;
+}
+
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.service-card {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.service-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.service-card.status-operational {
+  border-color: #10b981;
+}
+
+.service-card.status-degraded {
+  border-color: #f59e0b;
+}
+
+.service-card.status-partial {
+  border-color: #f97316;
+}
+
+.service-card.status-major {
+  border-color: #ef4444;
+}
+
+.service-card.status-maintenance {
+  border-color: #6366f1;
+}
+
+.service-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.service-status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.service-card.status-operational .service-status-indicator {
+  background-color: #10b981;
+}
+
+.service-card.status-degraded .service-status-indicator {
+  background-color: #f59e0b;
+}
+
+.service-card.status-partial .service-status-indicator {
+  background-color: #f97316;
+}
+
+.service-card.status-major .service-status-indicator {
+  background-color: #ef4444;
+}
+
+.service-card.status-maintenance .service-status-indicator {
+  background-color: #6366f1;
+}
+
+.service-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #1f2937;
+}
+
+.service-description {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.service-status {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.incidents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.incident-card {
+  background: white;
+  border-left: 4px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.incident-card.incident-investigating {
+  border-left-color: #f59e0b;
+}
+
+.incident-card.incident-identified {
+  border-left-color: #f97316;
+}
+
+.incident-card.incident-monitoring {
+  border-left-color: #6366f1;
+}
+
+.incident-card.incident-resolved {
+  border-left-color: #10b981;
+}
+
+.incident-card.incident-scheduled {
+  border-left-color: #6366f1;
+}
+
+.incident-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+.incident-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #1f2937;
+  flex: 1;
+}
+
+.incident-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.incident-message {
+  color: #4b5563;
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.incident-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.incident-meta .resolved {
+  color: #10b981;
+  font-weight: 500;
+}
+
+.incident-updates {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.incident-updates h4 {
+  font-size: 1rem;
+  color: #374151;
+  margin-bottom: 1rem;
+}
+
+.incident-update {
+  margin-bottom: 1rem;
+  padding-left: 1rem;
+  border-left: 2px solid #e5e7eb;
+}
+
+.incident-update .update-time {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.incident-update p {
+  margin: 0;
+  color: #4b5563;
+}
+
+.status-loading,
+.status-error {
+  text-align: center;
+  padding: 3rem;
+  font-size: 1.25rem;
+}
+
+.status-error {
+  color: #ef4444;
+}
+
+.no-services,
+.no-incidents {
+  text-align: center;
+  padding: 2rem;
+  color: #6b7280;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  .status-page {
+    padding: 1rem;
+  }
+
+  .services-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .incident-header {
+    flex-direction: column;
+  }
+}
+
