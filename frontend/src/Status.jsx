@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import toast from 'react-hot-toast'
 import './Status.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -7,8 +8,13 @@ function Status() {
   const [statusData, setStatusData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
+    // Vérifier si l'utilisateur est admin
+    const token = localStorage.getItem('token')
+    setIsAdmin(!!token)
+    
     fetchStatus()
     // Refresh every 30 seconds
     const interval = setInterval(fetchStatus, 30000)
@@ -72,6 +78,48 @@ function Status() {
       minute: '2-digit'
     })
   }
+
+  const updateServiceStatus = async (serviceId, newStatus) => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Vous devez être connecté pour modifier le statut')
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/v1/admin/service-instances/${serviceId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: newStatus })
+      })
+
+      if (response.ok) {
+        toast.success('Statut mis à jour')
+        // Recharger les données
+        fetchStatus()
+      } else if (response.status === 401 || response.status === 403) {
+        toast.error('Accès refusé. Vous devez être administrateur.')
+        setIsAdmin(false)
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Erreur lors de la mise à jour' }))
+        toast.error(`Erreur: ${errorData.detail || 'Erreur lors de la mise à jour'}`)
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour statut:', error)
+      toast.error('Erreur de connexion')
+    }
+  }
+
+  const statusOptions = [
+    { value: 'operational', label: 'Opérationnel', color: '#10b981' },
+    { value: 'degraded', label: 'Dégradé', color: '#f59e0b' },
+    { value: 'partial_outage', label: 'Panne partielle', color: '#f97316' },
+    { value: 'major_outage', label: 'Panne majeure', color: '#ef4444' },
+    { value: 'maintenance', label: 'Maintenance', color: '#6366f1' }
+  ]
 
   if (loading) {
     return (
@@ -170,7 +218,10 @@ function Status() {
                           )}
                           <div className={`services-list ${allOperational ? 'services-list-compact' : ''}`}>
                             {services.map((service) => (
-                              <div key={service.id} className={`service-item ${getStatusClass(service.status)} ${allOperational ? 'service-compact' : ''}`}>
+                              <div 
+                                key={service.id} 
+                                className={`service-item ${getStatusClass(service.status)} ${allOperational ? 'service-compact' : ''} ${isAdmin ? 'service-item-admin' : ''}`}
+                              >
                                 {!allOperational && (
                                   <>
                                     <div className="service-header">
@@ -189,6 +240,24 @@ function Status() {
                                   <div className="service-compact-content">
                                     <span className="service-status-indicator service-indicator-small"></span>
                                     <span className="service-name-compact">{service.name}</span>
+                                  </div>
+                                )}
+                                {isAdmin && (
+                                  <div className="service-status-buttons">
+                                    {statusOptions.map((option) => (
+                                      <button
+                                        key={option.value}
+                                        className={`status-btn ${service.status === option.value ? 'status-btn-active' : ''}`}
+                                        onClick={() => updateServiceStatus(service.id, option.value)}
+                                        style={{ 
+                                          borderColor: option.color,
+                                          color: service.status === option.value ? option.color : '#616061'
+                                        }}
+                                        title={option.label}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    ))}
                                   </div>
                                 )}
                               </div>
