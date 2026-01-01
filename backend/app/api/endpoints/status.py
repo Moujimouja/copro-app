@@ -18,6 +18,11 @@ class ServiceResponse(BaseModel):
     description: Optional[str]
     status: str
     order: int
+    building_id: Optional[int] = None
+    building_identifier: Optional[str] = None
+    building_name: Optional[str] = None
+    service_type_id: Optional[int] = None
+    service_type_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -88,10 +93,23 @@ class IncidentResponse(BaseModel):
         )
 
 
+class CoproInfo(BaseModel):
+    id: int
+    name: str
+    address: Optional[str] = None
+    city: Optional[str] = None
+    postal_code: Optional[str] = None
+    country: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class StatusPageResponse(BaseModel):
     services: List[ServiceResponse]
     incidents: List[IncidentResponse]
     overall_status: str  # Overall system status
+    copro: Optional[CoproInfo] = None
 
 
 @router.get("/services", response_model=List[ServiceResponse])
@@ -120,7 +138,8 @@ async def get_status_page(db: Session = Depends(get_db)):
         return {
             "services": [],
             "incidents": [],
-            "overall_status": "operational"
+            "overall_status": "operational",
+            "copro": None
         }
     
     # Utiliser ServiceInstance au lieu de Service (ancien modèle)
@@ -159,13 +178,26 @@ async def get_status_page(db: Session = Depends(get_db)):
             name=si.name,
             description=si.description or f"{si.service_type.name if si.service_type else ''} - Bâtiment {si.building.identifier if si.building else ''}",
             status=si.status,
-            order=si.order
+            order=si.order,
+            building_id=si.building_id,
+            building_identifier=si.building.identifier if si.building else None,
+            building_name=si.building.name if si.building else None,
+            service_type_id=si.service_type_id,
+            service_type_name=si.service_type.name if si.service_type else None
         ))
     
     return {
         "services": services_data,
         "incidents": [IncidentResponse.from_incident(i) for i in incidents],
-        "overall_status": overall_status
+        "overall_status": overall_status,
+        "copro": CoproInfo(
+            id=copro.id,
+            name=copro.name,
+            address=copro.address,
+            city=copro.city,
+            postal_code=copro.postal_code,
+            country=copro.country
+        ) if copro else None
     }
 
 

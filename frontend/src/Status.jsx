@@ -101,6 +101,22 @@ function Status() {
     <div className="status-page">
       <div className="status-header">
         <h1>Statut des Services</h1>
+        {statusData.copro && (
+          <div className="copro-info">
+            <h3>{statusData.copro.name}</h3>
+            {(statusData.copro.address || statusData.copro.city || statusData.copro.postal_code) && (
+              <p className="copro-address">
+                {statusData.copro.address && <span>{statusData.copro.address}</span>}
+                {statusData.copro.address && (statusData.copro.city || statusData.copro.postal_code) && <span>, </span>}
+                {statusData.copro.postal_code && <span>{statusData.copro.postal_code}</span>}
+                {statusData.copro.postal_code && statusData.copro.city && <span> </span>}
+                {statusData.copro.city && <span>{statusData.copro.city}</span>}
+                {statusData.copro.country && (statusData.copro.city || statusData.copro.postal_code || statusData.copro.address) && <span>, </span>}
+                {statusData.copro.country && <span>{statusData.copro.country}</span>}
+              </p>
+            )}
+          </div>
+        )}
         <div className={`overall-status ${getStatusClass(statusData.overall_status)}`}>
           <span className="status-indicator"></span>
           <span className="status-text">{getStatusLabel(statusData.overall_status)}</span>
@@ -110,25 +126,83 @@ function Status() {
       <div className="status-content">
         <section className="services-section">
           <h2>Services</h2>
-          <div className="services-grid">
-            {statusData.services.map((service) => (
-              <div key={service.id} className={`service-card ${getStatusClass(service.status)}`}>
-                <div className="service-header">
-                  <span className="service-status-indicator"></span>
-                  <h3>{service.name}</h3>
-                </div>
-                {service.description && (
-                  <p className="service-description">{service.description}</p>
-                )}
-                <div className="service-status">
-                  {getStatusLabel(service.status)}
-                </div>
+          {(() => {
+            // Grouper les services par bâtiment puis par type
+            const groupedServices = {}
+            const allOperational = statusData.services.every(s => s.status === 'operational')
+            
+            statusData.services.forEach(service => {
+              const buildingKey = service.building_identifier || service.building_name || 'Commun'
+              const typeKey = service.service_type_name || 'Autre'
+              
+              if (!groupedServices[buildingKey]) {
+                groupedServices[buildingKey] = {}
+              }
+              if (!groupedServices[buildingKey][typeKey]) {
+                groupedServices[buildingKey][typeKey] = []
+              }
+              groupedServices[buildingKey][typeKey].push(service)
+            })
+            
+            if (statusData.services.length === 0) {
+              return <p className="no-services">Aucun service configuré</p>
+            }
+            
+            return (
+              <div className={`services-container ${allOperational ? 'services-compact' : ''}`}>
+                {Object.entries(groupedServices).map(([buildingKey, types]) => (
+                  <div key={buildingKey} className="building-group">
+                    <h3 className="building-title">{buildingKey}</h3>
+                    <div className="building-group-types">
+                      {Object.entries(types).map(([typeKey, services]) => {
+                      const typeStatus = services.some(s => s.status !== 'operational') 
+                        ? services.find(s => s.status !== 'operational')?.status || 'operational'
+                        : 'operational'
+                      
+                      return (
+                        <div key={typeKey} className={`service-type-group ${allOperational ? 'type-compact' : ''}`}>
+                          {!allOperational && (
+                            <div className={`type-header ${getStatusClass(typeStatus)}`}>
+                              <span className="type-status-indicator"></span>
+                              <span className="type-name">{typeKey}</span>
+                              <span className="type-count">({services.length})</span>
+                            </div>
+                          )}
+                          <div className={`services-list ${allOperational ? 'services-list-compact' : ''}`}>
+                            {services.map((service) => (
+                              <div key={service.id} className={`service-item ${getStatusClass(service.status)} ${allOperational ? 'service-compact' : ''}`}>
+                                {!allOperational && (
+                                  <>
+                                    <div className="service-header">
+                                      <span className="service-status-indicator"></span>
+                                      <h4>{service.name}</h4>
+                                    </div>
+                                    {service.description && (
+                                      <p className="service-description">{service.description}</p>
+                                    )}
+                                    <div className="service-status">
+                                      {getStatusLabel(service.status)}
+                                    </div>
+                                  </>
+                                )}
+                                {allOperational && (
+                                  <div className="service-compact-content">
+                                    <span className="service-status-indicator service-indicator-small"></span>
+                                    <span className="service-name-compact">{service.name}</span>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-            {statusData.services.length === 0 && (
-              <p className="no-services">Aucun service configuré</p>
-            )}
-          </div>
+            )
+          })()}
         </section>
 
         <section className="incidents-section">
