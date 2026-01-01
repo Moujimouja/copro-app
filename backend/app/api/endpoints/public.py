@@ -19,7 +19,7 @@ class TicketCreate(BaseModel):
     service_instance_id: Optional[int] = None
     reporter_name: str
     reporter_email: EmailStr
-    reporter_phone: str
+    reporter_phone: Optional[str] = None
     title: str
     description: str
     location: Optional[str] = None
@@ -97,20 +97,22 @@ async def create_ticket(
                 detail="Le nom doit contenir au moins 2 caractères"
             )
         
-        # Validation du téléphone (format français)
-        clean_phone = re.sub(r'[\s\-\.]', '', ticket_data.reporter_phone)
-        if not re.match(r'^0[1-9][0-9]{8}$', clean_phone):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Le numéro de téléphone doit être un numéro français valide (10 chiffres, exemple: 0612345678)"
-            )
+        # Validation du téléphone (optionnel, mais si rempli, doit être valide)
+        clean_phone = None
+        if ticket_data.reporter_phone and ticket_data.reporter_phone.strip():
+            clean_phone = re.sub(r'[\s\-\.]', '', ticket_data.reporter_phone)
+            if not re.match(r'^0[1-9][0-9]{8}$', clean_phone):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Le numéro de téléphone doit être un numéro français valide (10 chiffres, exemple: 0612345678)"
+                )
         
         ticket = Ticket(
             copro_id=copro.id,
             service_instance_id=ticket_data.service_instance_id,
             reporter_name=ticket_data.reporter_name.strip(),
             reporter_email=ticket_data.reporter_email.strip(),
-            reporter_phone=clean_phone,  # Utiliser le numéro nettoyé
+            reporter_phone=clean_phone,  # Utiliser le numéro nettoyé ou None
             title=ticket_data.title.strip(),
             description=ticket_data.description.strip(),
             location=ticket_data.location.strip() if ticket_data.location else None,

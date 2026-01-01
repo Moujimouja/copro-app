@@ -87,10 +87,8 @@ function ReportIncident() {
       }
     }
     
-    // Validation du téléphone
-    if (!formData.reporter_phone || formData.reporter_phone.trim().length === 0) {
-      errors.reporter_phone = 'Le numéro de téléphone est obligatoire'
-    } else {
+    // Validation du téléphone (optionnel, mais si rempli, doit être valide)
+    if (formData.reporter_phone && formData.reporter_phone.trim().length > 0) {
       // Nettoyer le numéro (enlever espaces, tirets, points)
       const cleanPhone = formData.reporter_phone.replace(/[\s\-\.]/g, '')
       // Vérifier que c'est un numéro français valide (10 chiffres commençant par 0)
@@ -130,7 +128,9 @@ function ReportIncident() {
           location: formData.location ? formData.location.trim() : null,
           reporter_name: formData.reporter_name.trim(),
           reporter_email: formData.reporter_email.trim(),
-          reporter_phone: formData.reporter_phone.replace(/[\s\-\.]/g, '')
+          reporter_phone: formData.reporter_phone && formData.reporter_phone.trim() 
+            ? formData.reporter_phone.replace(/[\s\-\.]/g, '') 
+            : null
         })
       })
 
@@ -343,7 +343,8 @@ function ReportIncident() {
           )}
         </div>
 
-        <h3>Vos coordonnées *</h3>
+        <h3>Vos coordonnées</h3>
+        <p className="form-hint">Le nom et l'email sont obligatoires, le téléphone est optionnel</p>
 
         <div className="form-group">
           <label htmlFor="reporter_name">Nom *</label>
@@ -380,16 +381,15 @@ function ReportIncident() {
         </div>
 
         <div className="form-group">
-          <label htmlFor="reporter_phone">Téléphone *</label>
+          <label htmlFor="reporter_phone">Téléphone</label>
           <input
             type="tel"
             id="reporter_phone"
             name="reporter_phone"
             value={formData.reporter_phone}
             onChange={handleChange}
-            required
             className={fieldErrors.reporter_phone ? 'error' : ''}
-            placeholder="06 12 34 56 78"
+            placeholder="06 12 34 56 78 (optionnel)"
           />
           {fieldErrors.reporter_phone && (
             <span className="field-error">{fieldErrors.reporter_phone}</span>

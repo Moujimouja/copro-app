@@ -338,6 +338,11 @@ function Admin() {
       loadMaintenances()
       loadEquipments()
     }
+    
+    // Charger les tickets au démarrage pour afficher le compteur dans l'onglet (seulement si pas déjà chargé)
+    if (activeTab !== 'tickets') {
+      loadTickets()
+    }
   }, [activeTab, loadEquipments, loadBuildings, loadTickets, loadCopro, loadIncidents, loadUsers, loadAdmins, loadMaintenances, navigate])
 
   const updateEquipmentStatus = async (equipmentId, newStatus) => {
@@ -1325,7 +1330,7 @@ function Admin() {
           className={activeTab === 'tickets' ? 'active' : ''}
           onClick={() => setActiveTab('tickets')}
         >
-          Tickets ({tickets.filter(t => t.status === 'pending').length})
+          Demande à traiter ({tickets.filter(t => t.status !== 'closed').length})
         </button>
         <button 
           className={activeTab === 'incidents' ? 'active' : ''}
@@ -1813,7 +1818,7 @@ function Admin() {
 
       {activeTab === 'tickets' && (
         <div className="tickets-section">
-          <h2>Gestion des Tickets</h2>
+          <h2>Demande à traiter</h2>
           <div className="tickets-list">
             {tickets.map(ticket => (
               <div key={ticket.id} className={`ticket-card ticket-${ticket.status}`}>
