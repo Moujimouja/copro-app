@@ -34,6 +34,8 @@ function Login() {
           console.log('Token stocké:', data.access_token.substring(0, 50) + '...')
           toast.success('Connexion réussie!')
           setMessage('Connexion réussie!')
+          // Déclencher un événement pour mettre à jour l'état de connexion dans App
+          window.dispatchEvent(new Event('loginStateChanged'))
           // Rediriger vers admin immédiatement
           setTimeout(() => navigate('/admin'), 500)
         } else {
@@ -84,13 +86,31 @@ function App() {
 
   useEffect(() => {
     // Vérifier si l'utilisateur est connecté
-    const token = localStorage.getItem('token')
-    setIsLoggedIn(!!token)
+    const checkLogin = () => {
+      const token = localStorage.getItem('token')
+      setIsLoggedIn(!!token)
+    }
+    
+    // Vérifier au montage
+    checkLogin()
+    
+    // Écouter les changements de localStorage (pour les autres onglets)
+    window.addEventListener('storage', checkLogin)
+    
+    // Écouter un événement personnalisé pour les changements dans le même onglet
+    window.addEventListener('loginStateChanged', checkLogin)
+    
+    return () => {
+      window.removeEventListener('storage', checkLogin)
+      window.removeEventListener('loginStateChanged', checkLogin)
+    }
   }, [])
 
   const handleLogout = () => {
     localStorage.removeItem('token')
     setIsLoggedIn(false)
+    // Déclencher un événement pour mettre à jour l'état de connexion
+    window.dispatchEvent(new Event('loginStateChanged'))
   }
 
   return (
@@ -98,9 +118,9 @@ function App() {
       <div className="app">
         <nav>
           <div className="nav-left">
-            <Link to="/status">Copro Status</Link>
+            <Link to="/status">Statut de la copropriété</Link>
             <Link to="/report">Déclarer un incident</Link>
-            {isLoggedIn && <Link to="/admin">Admin</Link>}
+            {isLoggedIn && <Link to="/admin">Administration</Link>}
           </div>
           <div className="nav-right">
             {isLoggedIn ? (

@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from app.db import get_db
 from app.models.copro import Copro, Building, ServiceType, ServiceInstance
-from app.models.status import Incident, IncidentUpdate, IncidentStatus
+from app.models.status import Incident, IncidentUpdate, IncidentComment, IncidentStatus
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
 from app.auth import get_current_user
@@ -87,6 +87,18 @@ class TicketReview(BaseModel):
     status: str  # approved, rejected
     admin_notes: Optional[str] = None
     create_incident: bool = False  # Si True, créer un incident automatiquement
+
+
+class TicketAssign(BaseModel):
+    assigned_to: int  # ID de l'administrateur
+
+
+class IncidentStatusUpdate(BaseModel):
+    status: str  # investigating, in_progress, resolved, closed
+
+
+class IncidentCommentCreate(BaseModel):
+    comment: str
 
 
 # ============ Vérification Admin ============
@@ -757,6 +769,127 @@ async def create_incident(
     return {"message": "Incident créé", "incident_id": incident.id}
 
 
+@router.get("/incidents", response_model=List[dict])
+async def list_incidents(
+    status_filter: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Lister tous les incidents (admin uniquement)"""
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        return []
+    
+    query = db.query(Incident).filter(Incident.copro_id == copro.id)
+    
+    if status_filter:
+        query = query.filter(Incident.status == IncidentStatus(status_filter))
+    
+    incidents = query.order_by(Incident.created_at.desc()).all()
+    
+    result = []
+    for incident in incidents:
+        db.refresh(incident, ['service_instance'])
+        result.append({
+            "id": incident.id,
+            "title": incident.title,
+            "message": incident.message,
+            "status": incident.status.value,
+            "service_instance": incident.service_instance.name if incident.service_instance else None,
+            "service_instance_id": incident.service_instance_id,
+            "created_at": incident.created_at.isoformat() if incident.created_at else None,
+            "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
+        })
+    
+    return result
+
+
+@router.get("/incidents/{incident_id}", response_model=dict)
+async def get_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Obtenir un incident avec ses commentaires (admin uniquement)"""
+    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident non trouvé")
+    
+    db.refresh(incident, ['service_instance', 'updates', 'comments'])
+    
+    # Charger les commentaires avec les infos des admins
+    comments = []
+    for comment in incident.comments:
+        db.refresh(comment, ['admin'])
+        comments.append({
+            "id": comment.id,
+            "comment": comment.comment,
+            "admin_id": comment.admin_id,
+            "admin_username": comment.admin.username if comment.admin else None,
+            "created_at": comment.created_at.isoformat() if comment.created_at else None,
+        })
+    
+    return {
+        "id": incident.id,
+        "title": incident.title,
+        "message": incident.message,
+        "status": incident.status.value,
+        "service_instance": incident.service_instance.name if incident.service_instance else None,
+        "service_instance_id": incident.service_instance_id,
+        "created_at": incident.created_at.isoformat() if incident.created_at else None,
+        "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
+        "comments": comments,
+        "updates": [{"id": u.id, "message": u.message, "status": u.status.value, "created_at": u.created_at.isoformat()} for u in incident.updates]
+    }
+
+
+@router.patch("/incidents/{incident_id}/status")
+async def update_incident_status(
+    incident_id: int,
+    status_update: IncidentStatusUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Mettre à jour le statut d'un incident (admin uniquement)"""
+    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident non trouvé")
+    
+    new_status = IncidentStatus(status_update.status)
+    
+    # Validation des transitions de statut
+    valid_transitions = {
+        IncidentStatus.INVESTIGATING: [IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED, IncidentStatus.CLOSED],
+        IncidentStatus.IN_PROGRESS: [IncidentStatus.RESOLVED, IncidentStatus.CLOSED],
+        IncidentStatus.RESOLVED: [IncidentStatus.CLOSED],
+        IncidentStatus.CLOSED: []  # Une fois clos, on ne peut plus changer
+    }
+    
+    if new_status not in valid_transitions.get(incident.status, []):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transition de statut invalide: {incident.status.value} → {new_status.value}"
+        )
+    
+    # Mettre à jour le statut
+    incident.status = new_status
+    if new_status == IncidentStatus.RESOLVED or new_status == IncidentStatus.CLOSED:
+        incident.resolved_at = datetime.utcnow()
+    
+    # Créer une mise à jour automatique
+    update = IncidentUpdate(
+        incident_id=incident_id,
+        message=f"Statut changé: {incident.status.value} → {new_status.value}",
+        status=new_status
+    )
+    db.add(update)
+    
+    db.commit()
+    db.refresh(incident)
+    
+    return {"message": "Statut mis à jour", "incident_id": incident.id, "status": new_status.value}
+
+
 @router.post("/incidents/{incident_id}/updates", status_code=status.HTTP_201_CREATED)
 async def add_incident_update(
     incident_id: int,
@@ -779,13 +912,60 @@ async def add_incident_update(
     
     # Mettre à jour le statut de l'incident
     incident.status = IncidentStatus(update_data.status)
-    if update_data.status == "resolved":
+    if update_data.status == "resolved" or update_data.status == "closed":
         incident.resolved_at = datetime.utcnow()
     
     db.commit()
     db.refresh(update)
     
     return {"message": "Mise à jour ajoutée", "update_id": update.id}
+
+
+@router.post("/incidents/{incident_id}/comments", status_code=status.HTTP_201_CREATED)
+async def add_incident_comment(
+    incident_id: int,
+    comment_data: IncidentCommentCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Ajouter un commentaire à un incident (admin uniquement)"""
+    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident non trouvé")
+    
+    comment = IncidentComment(
+        incident_id=incident_id,
+        admin_id=admin.id,
+        comment=comment_data.comment
+    )
+    
+    db.add(comment)
+    db.commit()
+    db.refresh(comment, ['admin'])
+    
+    return {
+        "message": "Commentaire ajouté",
+        "comment_id": comment.id,
+        "comment": comment.comment,
+        "admin_username": admin.username,
+        "created_at": comment.created_at.isoformat() if comment.created_at else None
+    }
+
+
+# ============ Gestion des Administrateurs ============
+
+@router.get("/admins", response_model=List[dict])
+async def list_admins(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Lister tous les administrateurs (admin uniquement)"""
+    admins = db.query(User).filter(
+        User.is_superuser == True,
+        User.is_active == True
+    ).order_by(User.username).all()
+    
+    return [{"id": a.id, "username": a.username, "email": a.email} for a in admins]
 
 
 # ============ Gestion des Tickets ============
@@ -811,7 +991,7 @@ async def list_tickets(
     
     result = []
     for ticket in tickets:
-        db.refresh(ticket, ['service_instance', 'copro'])
+        db.refresh(ticket, ['service_instance', 'copro', 'assigned_admin', 'reviewer', 'incident'])
         result.append({
             "id": ticket.id,
             "title": ticket.title,
@@ -819,13 +999,50 @@ async def list_tickets(
             "status": ticket.status.value,
             "reporter_name": ticket.reporter_name,
             "reporter_email": ticket.reporter_email,
+            "reporter_phone": ticket.reporter_phone,
+            "location": ticket.location,
             "service_instance": ticket.service_instance.name if ticket.service_instance else None,
+            "service_instance_id": ticket.service_instance_id,
             "copro": ticket.copro.name if ticket.copro else None,
+            "assigned_to": ticket.assigned_to,
+            "assigned_admin": ticket.assigned_admin.username if ticket.assigned_admin else None,
+            "admin_notes": ticket.admin_notes,
+            "reviewed_by": ticket.reviewed_by,
+            "reviewer": ticket.reviewer.username if ticket.reviewer else None,
+            "incident_id": ticket.incident_id,
             "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
             "reviewed_at": ticket.reviewed_at.isoformat() if ticket.reviewed_at else None,
         })
     
     return result
+
+
+@router.patch("/tickets/{ticket_id}/assign")
+async def assign_ticket(
+    ticket_id: int,
+    assign_data: TicketAssign,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Assigner un ticket à un administrateur (admin uniquement)"""
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    
+    # Vérifier que l'utilisateur assigné est bien un admin
+    assigned_user = db.query(User).filter(
+        User.id == assign_data.assigned_to,
+        User.is_superuser == True
+    ).first()
+    if not assigned_user:
+        raise HTTPException(status_code=404, detail="Administrateur non trouvé")
+    
+    ticket.assigned_to = assign_data.assigned_to
+    ticket.status = TicketStatus.REVIEWING
+    db.commit()
+    db.refresh(ticket)
+    
+    return {"message": "Ticket assigné", "ticket_id": ticket.id}
 
 
 @router.post("/tickets/{ticket_id}/review")
@@ -852,23 +1069,46 @@ async def review_ticket(
             service_instance_id=ticket.service_instance_id,
             title=ticket.title,
             message=ticket.description,
-            status=IncidentStatus.INVESTIGATING
+            status=IncidentStatus.INVESTIGATING  # En cours d'analyse
         )
         db.add(incident)
         db.flush()
         
         ticket.incident_id = incident.id
         
-        # Optionnel: mettre à jour le statut du service si spécifié
+        # Mettre à jour le statut du service si spécifié
         if ticket.service_instance_id:
             service_instance = db.query(ServiceInstance).filter(
                 ServiceInstance.id == ticket.service_instance_id
             ).first()
             if service_instance:
-                service_instance.status = "degraded"  # Ou un autre statut approprié
+                service_instance.status = "degraded"
     
     db.commit()
     db.refresh(ticket)
     
     return {"message": "Ticket traité", "ticket_id": ticket.id}
+
+
+@router.post("/tickets/{ticket_id}/reject")
+async def reject_ticket(
+    ticket_id: int,
+    admin_notes: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Rejeter un ticket (admin uniquement)"""
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    
+    ticket.status = TicketStatus.REJECTED
+    ticket.admin_notes = admin_notes
+    ticket.reviewed_by = admin.id
+    ticket.reviewed_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(ticket)
+    
+    return {"message": "Ticket rejeté", "ticket_id": ticket.id}
 

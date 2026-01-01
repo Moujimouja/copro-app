@@ -40,6 +40,7 @@ class Ticket(Base):
     # Statut et gestion
     status = Column(SQLEnum(TicketStatus), default=TicketStatus.PENDING, nullable=False)
     admin_notes = Column(Text, nullable=True)  # Notes de l'admin
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # Admin assigné
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Admin qui a traité
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     
@@ -53,6 +54,7 @@ class Ticket(Base):
     # Relationships
     copro = relationship("Copro")
     service_instance = relationship("ServiceInstance")
+    assigned_admin = relationship("User", foreign_keys=[assigned_to])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     incident = relationship("Incident", foreign_keys=[incident_id])
 

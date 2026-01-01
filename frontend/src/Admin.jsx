@@ -8,11 +8,23 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 function Admin() {
   const [equipments, setEquipments] = useState([])
   const [tickets, setTickets] = useState([])
+  const [incidents, setIncidents] = useState([])
+  const [admins, setAdmins] = useState([])
   const [buildings, setBuildings] = useState([])
   const [serviceTypes, setServiceTypes] = useState([])
   const [copro, setCopro] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('copro')
+  const [selectedTicket, setSelectedTicket] = useState(null)
+  const [selectedIncident, setSelectedIncident] = useState(null)
+  const [showCommentForm, setShowCommentForm] = useState(false)
+  const [newComment, setNewComment] = useState('')
+  const [showIncidentForm, setShowIncidentForm] = useState(false)
+  const [selectedEquipmentForIncident, setSelectedEquipmentForIncident] = useState(null)
+  const [incidentFormData, setIncidentFormData] = useState({
+    title: '',
+    message: ''
+  })
   const [showCoproForm, setShowCoproForm] = useState(false)
   const [editingCopro, setEditingCopro] = useState(null)
   const [coproFormData, setCoproFormData] = useState({
@@ -217,8 +229,57 @@ function Admin() {
       loadBuildings()
     } else if (activeTab === 'tickets') {
       loadTickets()
+      loadAdmins()
+    } else if (activeTab === 'incidents') {
+      loadIncidents()
+      loadAdmins()
     }
   }, [activeTab, loadEquipments, loadBuildings, loadServiceTypes, loadTickets, loadCopro, navigate])
+
+  const loadAdmins = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/v1/admin/admins`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setAdmins(data)
+      }
+    } catch (error) {
+      console.error('Erreur chargement admins:', error)
+    }
+  }, [])
+
+  const loadIncidents = useCallback(async () => {
+    try {
+      setLoading(true)
+      const token = localStorage.getItem('token')
+      if (!token) {
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/v1/admin/incidents`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setIncidents(data)
+      } else if (response.status === 401) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+        return
+      }
+    } catch (error) {
+      console.error('Erreur chargement incidents:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   const updateEquipmentStatus = async (equipmentId, newStatus) => {
     try {
@@ -243,6 +304,59 @@ function Admin() {
     } catch (error) {
       console.error('Erreur mise à jour statut:', error)
       toast.error('Erreur lors de la mise à jour du statut')
+    }
+  }
+
+  const openIncidentForm = (equipment) => {
+    setSelectedEquipmentForIncident(equipment)
+    setIncidentFormData({
+      title: '',
+      message: ''
+    })
+    setShowIncidentForm(true)
+  }
+
+  const handleIncidentFormChange = (e) => {
+    const { name, value } = e.target
+    setIncidentFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  const handleSubmitIncident = async (e) => {
+    e.preventDefault()
+    if (!selectedEquipmentForIncident) return
+
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${API_URL}/api/v1/admin/incidents`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          service_instance_id: selectedEquipmentForIncident.id,
+          title: incidentFormData.title,
+          message: incidentFormData.message,
+          status: 'investigating'
+        })
+      })
+      if (response.ok) {
+        toast.success('Incident créé avec succès')
+        setShowIncidentForm(false)
+        setSelectedEquipmentForIncident(null)
+        setIncidentFormData({ title: '', message: '' })
+        loadEquipments()
+        loadIncidents()
+      } else {
+        const error = await response.json().catch(() => ({ detail: 'Erreur lors de la création de l\'incident' }))
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de la création de l\'incident'}`)
+      }
+    } catch (error) {
+      console.error('Erreur création incident:', error)
+      toast.error('Erreur lors de la création de l\'incident')
     }
   }
 
@@ -274,6 +388,33 @@ function Admin() {
     }
   }
 
+  const assignTicket = async (ticketId, adminId) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${API_URL}/api/v1/admin/tickets/${ticketId}/assign`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ assigned_to: adminId })
+        }
+      )
+      if (response.ok) {
+        toast.success('Ticket assigné avec succès')
+        loadTickets()
+      } else {
+        const error = await response.json()
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de l\'assignation'}`)
+      }
+    } catch (error) {
+      console.error('Erreur assignation ticket:', error)
+      toast.error('Erreur lors de l\'assignation')
+    }
+  }
+
   const reviewTicket = async (ticketId, status, createIncident, notes) => {
     try {
       const token = localStorage.getItem('token')
@@ -295,12 +436,121 @@ function Admin() {
       if (response.ok) {
         toast.success('Ticket traité avec succès')
         loadTickets()
+        if (createIncident) {
+          loadIncidents()
+        }
       } else {
-        toast.error('Erreur lors du traitement du ticket')
+        const error = await response.json()
+        toast.error(`Erreur: ${error.detail || 'Erreur lors du traitement du ticket'}`)
       }
     } catch (error) {
       console.error('Erreur traitement ticket:', error)
       toast.error('Erreur lors du traitement du ticket')
+    }
+  }
+
+  const rejectTicket = async (ticketId, notes) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${API_URL}/api/v1/admin/tickets/${ticketId}/reject`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ admin_notes: notes || '' })
+        }
+      )
+      if (response.ok) {
+        toast.success('Ticket rejeté')
+        loadTickets()
+      } else {
+        const error = await response.json()
+        toast.error(`Erreur: ${error.detail || 'Erreur lors du rejet'}`)
+      }
+    } catch (error) {
+      console.error('Erreur rejet ticket:', error)
+      toast.error('Erreur lors du rejet')
+    }
+  }
+
+  const updateIncidentStatus = async (incidentId, newStatus) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${API_URL}/api/v1/admin/incidents/${incidentId}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status: newStatus })
+        }
+      )
+      if (response.ok) {
+        toast.success('Statut de l\'incident mis à jour')
+        loadIncidents()
+        if (selectedIncident && selectedIncident.id === incidentId) {
+          loadIncidentDetails(incidentId)
+        }
+      } else {
+        const error = await response.json()
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de la mise à jour'}`)
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour statut incident:', error)
+      toast.error('Erreur lors de la mise à jour')
+    }
+  }
+
+  const loadIncidentDetails = async (incidentId) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${API_URL}/api/v1/admin/incidents/${incidentId}`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      )
+      if (response.ok) {
+        const data = await response.json()
+        setSelectedIncident(data)
+      }
+    } catch (error) {
+      console.error('Erreur chargement détails incident:', error)
+    }
+  }
+
+  const addIncidentComment = async (incidentId, comment) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${API_URL}/api/v1/admin/incidents/${incidentId}/comments`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ comment })
+        }
+      )
+      if (response.ok) {
+        toast.success('Commentaire ajouté')
+        setNewComment('')
+        setShowCommentForm(false)
+        loadIncidentDetails(incidentId)
+        loadIncidents()
+      } else {
+        const error = await response.json()
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de l\'ajout du commentaire'}`)
+      }
+    } catch (error) {
+      console.error('Erreur ajout commentaire:', error)
+      toast.error('Erreur lors de l\'ajout du commentaire')
     }
   }
 
@@ -411,7 +661,7 @@ function Admin() {
   }
 
   const handleDeleteEquipment = async (equipmentId) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet équipement ?')) {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cet équipement ?')) {
       return
     }
 
@@ -669,6 +919,12 @@ function Admin() {
         >
           Tickets ({tickets.filter(t => t.status === 'pending').length})
         </button>
+        <button 
+          className={activeTab === 'incidents' ? 'active' : ''}
+          onClick={() => setActiveTab('incidents')}
+        >
+          Incidents ({incidents.filter(i => i.status !== 'closed').length})
+        </button>
       </div>
 
       {activeTab === 'equipments' && (
@@ -806,62 +1062,129 @@ function Admin() {
             </div>
           )}
 
-          <div className="equipments-grid">
-            {equipments.map(equipment => (
-              <div key={equipment.id} className={`equipment-card ${getStatusClass(equipment.status)}`}>
-                <div className="equipment-header">
-                  <h3>{equipment.name}</h3>
-                  <span className={`status-badge ${getStatusClass(equipment.status)}`}>
-                    {getStatusLabel(equipment.status)}
-                  </span>
+          <div className="equipments-table-container">
+            <table className="equipments-table">
+              <thead>
+                <tr>
+                  <th>Nom</th>
+                  <th>Bâtiment</th>
+                  <th>Type</th>
+                  <th>Localisation</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {equipments.map(equipment => (
+                  <tr key={equipment.id} className={`equipment-row ${getStatusClass(equipment.status)}`}>
+                    <td className="equipment-name">{equipment.name}</td>
+                    <td>{equipment.building_name}</td>
+                    <td>{equipment.service_type_name}</td>
+                    <td>{equipment.location || '-'}</td>
+                    <td>
+                      <select
+                        value={equipment.status}
+                        onChange={(e) => updateEquipmentStatus(equipment.id, e.target.value)}
+                        className="status-select"
+                      >
+                        <option value="operational">Opérationnel</option>
+                        <option value="degraded">Dégradé</option>
+                        <option value="partial_outage">Panne partielle</option>
+                        <option value="major_outage">Panne majeure</option>
+                        <option value="maintenance">Maintenance</option>
+                      </select>
+                    </td>
+                    <td className="equipment-actions-cell">
+                      <div className="action-icons">
+                        <button
+                          onClick={() => openEditForm(equipment)}
+                          className="icon-btn icon-btn-edit"
+                          title="Modifier"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Êtes-vous sûr de vouloir supprimer l'équipement "${equipment.name}" ?`)) {
+                              handleDeleteEquipment(equipment.id)
+                            }
+                          }}
+                          className="icon-btn icon-btn-delete"
+                          title="Supprimer"
+                        >
+                          🗑️
+                        </button>
+                        <button
+                          onClick={() => openIncidentForm(equipment)}
+                          className="icon-btn icon-btn-incident"
+                          title="Créer un incident"
+                        >
+                          ⚠️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {equipments.length === 0 && (
+            <p className="no-equipments">Aucun équipement configuré</p>
+          )}
+
+          {showIncidentForm && selectedEquipmentForIncident && (
+            <div className="modal-overlay" onClick={() => setShowIncidentForm(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>Créer un incident</h3>
+                  <button className="btn-close" onClick={() => setShowIncidentForm(false)}>×</button>
                 </div>
-                <div className="equipment-info">
-                  <p><strong>Bâtiment:</strong> {equipment.building_name}</p>
-                  <p><strong>Type:</strong> {equipment.service_type_name}</p>
-                  {equipment.location && <p><strong>Localisation:</strong> {equipment.location}</p>}
-                </div>
-                <div className="equipment-actions">
-                  <div className="action-buttons">
-                    <button
-                      onClick={() => openEditForm(equipment)}
-                      className="btn-edit"
-                    >
-                      ✏️ Modifier
+                <form onSubmit={handleSubmitIncident} className="incident-form">
+                  <div className="form-group">
+                    <label>Équipement</label>
+                    <input
+                      type="text"
+                      value={selectedEquipmentForIncident.name}
+                      disabled
+                      className="form-input-disabled"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="incident-title">Titre de l'incident *</label>
+                    <input
+                      type="text"
+                      id="incident-title"
+                      name="title"
+                      value={incidentFormData.title}
+                      onChange={handleIncidentFormChange}
+                      required
+                      placeholder="Ex: Panne de l'ascenseur"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="incident-message">Description *</label>
+                    <textarea
+                      id="incident-message"
+                      name="message"
+                      value={incidentFormData.message}
+                      onChange={handleIncidentFormChange}
+                      required
+                      rows="5"
+                      placeholder="Décrivez le problème en détail..."
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button type="button" onClick={() => setShowIncidentForm(false)} className="btn-cancel">
+                      Annuler
                     </button>
-                    <button
-                      onClick={() => handleDeleteEquipment(equipment.id)}
-                      className="btn-delete"
-                    >
-                      🗑️ Supprimer
+                    <button type="submit" className="btn-submit">
+                      Créer l'incident
                     </button>
                   </div>
-                  <label>Changer le statut:</label>
-                  <select
-                    value={equipment.status}
-                    onChange={(e) => updateEquipmentStatus(equipment.id, e.target.value)}
-                  >
-                    <option value="operational">Opérationnel</option>
-                    <option value="degraded">Dégradé</option>
-                    <option value="partial_outage">Panne partielle</option>
-                    <option value="major_outage">Panne majeure</option>
-                    <option value="maintenance">Maintenance</option>
-                  </select>
-                  <button
-                    onClick={() => {
-                      const title = prompt('Titre de l\'incident:')
-                      const message = prompt('Description de l\'incident:')
-                      if (title && message) {
-                        createIncident(equipment.id, title, message)
-                      }
-                    }}
-                    className="btn-create-incident"
-                  >
-                    Créer un incident
-                  </button>
-                </div>
+                </form>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1118,37 +1441,227 @@ function Admin() {
                   <p><strong>Description:</strong> {ticket.description}</p>
                   {ticket.reporter_name && <p><strong>Déclarant:</strong> {ticket.reporter_name}</p>}
                   {ticket.reporter_email && <p><strong>Email:</strong> {ticket.reporter_email}</p>}
+                  {ticket.reporter_phone && <p><strong>Téléphone:</strong> {ticket.reporter_phone}</p>}
+                  {ticket.location && <p><strong>Localisation:</strong> {ticket.location}</p>}
                   {ticket.service_instance && <p><strong>Équipement:</strong> {ticket.service_instance}</p>}
+                  {ticket.assigned_admin && <p><strong>Assigné à:</strong> {ticket.assigned_admin}</p>}
+                  {ticket.admin_notes && <p><strong>Notes admin:</strong> {ticket.admin_notes}</p>}
+                  {ticket.incident_id && <p><strong>Incident créé:</strong> #{ticket.incident_id}</p>}
                   <p><strong>Date:</strong> {new Date(ticket.created_at).toLocaleString('fr-FR')}</p>
+                  {ticket.reviewed_at && <p><strong>Traité le:</strong> {new Date(ticket.reviewed_at).toLocaleString('fr-FR')}</p>}
                 </div>
-                {ticket.status === 'pending' && (
-                  <div className="ticket-actions">
-                    <button
-                      onClick={() => {
-                        const notes = prompt('Notes (optionnel):')
-                        reviewTicket(ticket.id, 'approved', true, notes)
-                      }}
-                      className="btn-approve"
-                    >
-                      Approuver et créer incident
-                    </button>
-                    <button
-                      onClick={() => {
-                        const notes = prompt('Raison du rejet:')
-                        if (notes) {
-                          reviewTicket(ticket.id, 'rejected', false, notes)
-                        }
-                      }}
-                      className="btn-reject"
-                    >
-                      Rejeter
-                    </button>
-                  </div>
-                )}
+                <div className="ticket-actions">
+                  {ticket.status === 'pending' && (
+                    <>
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            assignTicket(ticket.id, parseInt(e.target.value))
+                          }
+                        }}
+                        defaultValue=""
+                        className="select-assign"
+                      >
+                        <option value="">Assigner à...</option>
+                        {admins.map(admin => (
+                          <option key={admin.id} value={admin.id}>{admin.username}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => {
+                          const notes = window.prompt('Notes (optionnel):') || ''
+                          reviewTicket(ticket.id, 'approved', true, notes)
+                        }}
+                        className="btn-approve"
+                      >
+                        Approuver et créer incident
+                      </button>
+                      <button
+                        onClick={() => {
+                          const notes = window.prompt('Raison du rejet:') || ''
+                          rejectTicket(ticket.id, notes)
+                        }}
+                        className="btn-reject"
+                      >
+                        Rejeter
+                      </button>
+                    </>
+                  )}
+                  {(ticket.status === 'reviewing' || ticket.status === 'approved') && (
+                    <>
+                      <button
+                        onClick={() => {
+                          const notes = window.prompt('Notes (optionnel):') || ''
+                          reviewTicket(ticket.id, 'approved', true, notes)
+                        }}
+                        className="btn-approve"
+                      >
+                        Approuver et créer incident
+                      </button>
+                      <button
+                        onClick={() => {
+                          const notes = window.prompt('Raison du rejet:') || ''
+                          rejectTicket(ticket.id, notes)
+                        }}
+                        className="btn-reject"
+                      >
+                        Rejeter
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
             {tickets.length === 0 && <p>Aucun ticket</p>}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'incidents' && (
+        <div className="incidents-section">
+          <h2>Gestion des Incidents</h2>
+          <div className="incidents-list">
+            {incidents.map(incident => (
+              <div 
+                key={incident.id} 
+                className={`incident-card incident-${incident.status}`}
+                onClick={() => {
+                  setSelectedIncident(null)
+                  loadIncidentDetails(incident.id)
+                }}
+              >
+                <div className="incident-header">
+                  <h3>{incident.title}</h3>
+                  <select
+                    value={incident.status}
+                    onChange={(e) => {
+                      e.stopPropagation()
+                      updateIncidentStatus(incident.id, e.target.value)
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className={`incident-status-select incident-status-${incident.status}`}
+                  >
+                    <option value="investigating">En cours d'analyse</option>
+                    <option value="in_progress">En cours de traitement</option>
+                    <option value="resolved">Résolu</option>
+                    <option value="closed">Clos</option>
+                  </select>
+                </div>
+                <div className="incident-body">
+                  <p><strong>Description:</strong> {incident.message}</p>
+                  {incident.service_instance && <p><strong>Équipement:</strong> {incident.service_instance}</p>}
+                  <p><strong>Créé le:</strong> {new Date(incident.created_at).toLocaleString('fr-FR')}</p>
+                  {incident.resolved_at && <p><strong>Résolu le:</strong> {new Date(incident.resolved_at).toLocaleString('fr-FR')}</p>}
+                </div>
+                <div className="incident-actions">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedIncident(null)
+                      loadIncidentDetails(incident.id)
+                    }}
+                    className="btn-view"
+                  >
+                    Voir détails
+                  </button>
+                </div>
+              </div>
+            ))}
+            {incidents.length === 0 && <p>Aucun incident</p>}
+          </div>
+
+          {selectedIncident && (
+            <div className="modal-overlay" onClick={() => setSelectedIncident(null)}>
+              <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>Détails de l'incident: {selectedIncident.title}</h3>
+                  <button className="btn-close" onClick={() => setSelectedIncident(null)}>×</button>
+                </div>
+                <div className="incident-details">
+                  <div className="incident-info">
+                    <div className="incident-info-row">
+                      <label><strong>Statut:</strong></label>
+                      <select
+                        value={selectedIncident.status}
+                        onChange={(e) => updateIncidentStatus(selectedIncident.id, e.target.value)}
+                        className={`incident-status-select incident-status-${selectedIncident.status}`}
+                      >
+                        <option value="investigating">En cours d'analyse</option>
+                        <option value="in_progress">En cours de traitement</option>
+                        <option value="resolved">Résolu</option>
+                        <option value="closed">Clos</option>
+                      </select>
+                    </div>
+                    <p><strong>Description:</strong> {selectedIncident.message}</p>
+                    {selectedIncident.service_instance && <p><strong>Équipement:</strong> {selectedIncident.service_instance}</p>}
+                    <p><strong>Créé le:</strong> {new Date(selectedIncident.created_at).toLocaleString('fr-FR')}</p>
+                    {selectedIncident.resolved_at && <p><strong>Résolu le:</strong> {new Date(selectedIncident.resolved_at).toLocaleString('fr-FR')}</p>}
+                  </div>
+
+
+                  <div className="comments-section">
+                    <h4>Commentaires</h4>
+                    <div className="comments-list">
+                      {selectedIncident.comments && selectedIncident.comments.length > 0 ? (
+                        selectedIncident.comments.map(comment => (
+                          <div key={comment.id} className="comment-item">
+                            <div className="comment-header">
+                              <strong>{comment.admin_username}</strong>
+                              <span className="comment-date">
+                                {new Date(comment.created_at).toLocaleString('fr-FR')}
+                              </span>
+                            </div>
+                            <div className="comment-body">{comment.comment}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="no-comments">Aucun commentaire</p>
+                      )}
+                    </div>
+                    {!showCommentForm ? (
+                      <button
+                        onClick={() => setShowCommentForm(true)}
+                        className="btn-add-comment"
+                      >
+                        + Ajouter un commentaire
+                      </button>
+                    ) : (
+                      <div className="comment-form">
+                        <textarea
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          placeholder="Votre commentaire..."
+                          rows="4"
+                        />
+                        <div className="comment-form-actions">
+                          <button
+                            onClick={() => {
+                              setNewComment('')
+                              setShowCommentForm(false)
+                            }}
+                            className="btn-cancel"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (newComment.trim()) {
+                                addIncidentComment(selectedIncident.id, newComment)
+                              }
+                            }}
+                            className="btn-submit"
+                            disabled={!newComment.trim()}
+                          >
+                            Envoyer
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -53,8 +53,29 @@ function ReportIncident() {
       if (response.ok) {
         setSubmitted(true)
       } else {
-        const data = await response.json()
-        setError(data.detail || 'Erreur lors de la soumission')
+        try {
+          const data = await response.json()
+          // Gérer les erreurs de validation FastAPI qui peuvent être un tableau
+          if (Array.isArray(data.detail)) {
+            const errorMessages = data.detail.map(err => {
+              if (typeof err === 'object' && err.msg) {
+                const field = err.loc ? err.loc.slice(1).join('.') : 'Champ'
+                return `${field}: ${err.msg}`
+              }
+              return String(err)
+            }).join('; ')
+            setError(errorMessages || 'Erreur de validation')
+          } else if (typeof data.detail === 'string') {
+            setError(data.detail)
+          } else if (data.detail && typeof data.detail === 'object') {
+            // Si c'est un objet avec un message
+            setError(data.detail.msg || data.detail.message || 'Erreur lors de la soumission')
+          } else {
+            setError(`Erreur ${response.status}: ${response.statusText}`)
+          }
+        } catch (parseError) {
+          setError(`Erreur ${response.status}: ${response.statusText}`)
+        }
       }
     } catch (error) {
       setError('Erreur de connexion. Veuillez réessayer.')
