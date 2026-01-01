@@ -267,35 +267,31 @@ function Status() {
                           {sortedServices.map((service) => (
                             <div 
                               key={service.id} 
-                              className={`service-item-list ${getStatusClass(service.status)} ${isAdmin ? 'service-item-admin' : ''}`}
+                              className={`service-item-list ${getStatusClass(service.status)}`}
                             >
                               <div className="service-item-content">
                                 <span className="service-status-indicator"></span>
-                                <div className="service-info">
-                                  <h4 className="service-name">{service.name}</h4>
-                                  {service.description && (
-                                    <p className="service-description">{service.description}</p>
-                                  )}
-                                  <span className="service-status-badge">{getStatusLabel(service.status)}</span>
-                                </div>
+                                <span className="service-name">{service.name}</span>
+                                {service.description && (
+                                  <span className="service-description"> • {service.description}</span>
+                                )}
+                                <span className="service-status-badge">{getStatusLabel(service.status)}</span>
                               </div>
                               {isAdmin && (
-                                <div className="service-status-buttons">
+                                <select
+                                  className="service-status-dropdown"
+                                  value={service.status}
+                                  onChange={(e) => updateServiceStatus(service.id, e.target.value)}
+                                  style={{
+                                    borderColor: statusOptions.find(opt => opt.value === service.status)?.color || '#e5e7eb'
+                                  }}
+                                >
                                   {statusOptions.map((option) => (
-                                    <button
-                                      key={option.value}
-                                      className={`status-btn-small ${service.status === option.value ? 'status-btn-active' : ''}`}
-                                      onClick={() => updateServiceStatus(service.id, option.value)}
-                                      style={{ 
-                                        borderColor: option.color,
-                                        color: service.status === option.value ? option.color : '#616061'
-                                      }}
-                                      title={option.label}
-                                    >
+                                    <option key={option.value} value={option.value}>
                                       {option.label}
-                                    </button>
+                                    </option>
                                   ))}
-                                </div>
+                                </select>
                               )}
                             </div>
                           ))}
