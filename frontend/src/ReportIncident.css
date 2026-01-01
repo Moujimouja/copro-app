@@ -190,6 +190,24 @@
     gap: 1rem;
   }
 
+  .report-header .btn-qr {
+    width: 100%;
+  }
+
+  .qr-section {
+    padding: 1rem;
+  }
+
+  .incident-form {
+    padding: 1rem;
+  }
+
+  .form-group input,
+  .form-group textarea,
+  .form-group select {
+    font-size: 16px; /* Évite le zoom sur iOS */
+  }
+
   .qr-container {
     padding: 1rem;
   }

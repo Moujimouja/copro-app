@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom'
+import { Toaster, toast } from 'react-hot-toast'
 import Status from './Status'
 import Admin from './Admin'
 import ReportIncident from './ReportIncident'
@@ -31,14 +32,17 @@ function Login() {
         if (data.access_token) {
           localStorage.setItem('token', data.access_token)
           console.log('Token stocké:', data.access_token.substring(0, 50) + '...')
+          toast.success('Connexion réussie!')
           setMessage('Connexion réussie!')
           // Rediriger vers admin immédiatement
-          navigate('/admin')
+          setTimeout(() => navigate('/admin'), 500)
         } else {
+          toast.error('Erreur: Token non reçu')
           setMessage('Erreur: Token non reçu')
         }
       } else {
         const errorData = await response.json().catch(() => ({ detail: 'Échec de la connexion' }))
+        toast.error(`Erreur: ${errorData.detail || 'Échec de la connexion'}`)
         setMessage(`Erreur: ${errorData.detail || 'Échec de la connexion'}`)
       }
     } catch (error) {
@@ -115,6 +119,33 @@ function App() {
             <Route path="/login" element={<Login />} />
           </Routes>
         </main>
+        <Toaster 
+          position="top-right"
+          toastOptions={{
+            duration: 3000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              fontSize: '14px',
+            },
+            success: {
+              duration: 3000,
+              iconTheme: {
+                primary: '#10b981',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              duration: 4000,
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
       </div>
     </Router>
   )

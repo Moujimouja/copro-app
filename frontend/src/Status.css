@@ -293,12 +293,37 @@
     padding: 1rem;
   }
 
+  .status-header h1 {
+    font-size: 1.75rem;
+  }
+
+  .overall-status {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+  }
+
   .services-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .service-card {
+    padding: 1rem;
   }
 
   .incident-header {
     flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .incident-meta {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .incident-updates {
+    margin-top: 1rem;
+    padding-top: 1rem;
   }
 }
 

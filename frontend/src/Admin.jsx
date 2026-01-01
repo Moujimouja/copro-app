@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import './Admin.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -73,7 +74,7 @@ function Admin() {
         window.location.href = '/login'
         return
       } else if (response.status === 403) {
-        alert('Accès refusé. Vous devez être administrateur.')
+        toast.error('Accès refusé. Vous devez être administrateur.')
         navigate('/')
       }
     } catch (error) {
@@ -234,13 +235,14 @@ function Admin() {
         }
       )
       if (response.ok) {
+        toast.success('Statut mis à jour avec succès')
         loadEquipments()
       } else {
-        alert('Erreur lors de la mise à jour du statut')
+        toast.error('Erreur lors de la mise à jour du statut')
       }
     } catch (error) {
       console.error('Erreur mise à jour statut:', error)
-      alert('Erreur lors de la mise à jour du statut')
+      toast.error('Erreur lors de la mise à jour du statut')
     }
   }
 
@@ -261,14 +263,14 @@ function Admin() {
         })
       })
       if (response.ok) {
-        alert('Incident créé avec succès')
+        toast.success('Incident créé avec succès')
         loadEquipments()
       } else {
-        alert('Erreur lors de la création de l\'incident')
+        toast.error('Erreur lors de la création de l\'incident')
       }
     } catch (error) {
       console.error('Erreur création incident:', error)
-      alert('Erreur lors de la création de l\'incident')
+      toast.error('Erreur lors de la création de l\'incident')
     }
   }
 
@@ -291,14 +293,14 @@ function Admin() {
         }
       )
       if (response.ok) {
-        alert('Ticket traité avec succès')
+        toast.success('Ticket traité avec succès')
         loadTickets()
       } else {
-        alert('Erreur lors du traitement du ticket')
+        toast.error('Erreur lors du traitement du ticket')
       }
     } catch (error) {
       console.error('Erreur traitement ticket:', error)
-      alert('Erreur lors du traitement du ticket')
+      toast.error('Erreur lors du traitement du ticket')
     }
   }
 
@@ -369,7 +371,7 @@ function Admin() {
     try {
       const token = localStorage.getItem('token')
       if (!token) {
-        alert('Session expirée. Veuillez vous reconnecter.')
+        toast.error('Session expirée. Veuillez vous reconnecter.')
         navigate('/login')
         return
       }
@@ -390,21 +392,21 @@ function Admin() {
       })
 
       if (response.ok) {
-        alert(editingEquipment ? 'Équipement mis à jour' : 'Équipement créé')
+        toast.success(editingEquipment ? 'Équipement mis à jour' : 'Équipement créé')
         setShowEquipmentForm(false)
         loadEquipments()
       } else if (response.status === 401 || response.status === 403) {
         // Token expiré ou invalide
         localStorage.removeItem('token')
-        alert('Session expirée. Veuillez vous reconnecter.')
+        toast.error('Session expirée. Veuillez vous reconnecter.')
         navigate('/login')
       } else {
         const errorData = await response.json().catch(() => ({ detail: 'Erreur lors de la sauvegarde' }))
-        alert(`Erreur: ${errorData.detail || 'Erreur lors de la sauvegarde'}`)
+        toast.error(`Erreur: ${errorData.detail || 'Erreur lors de la sauvegarde'}`)
       }
     } catch (error) {
       console.error('Erreur sauvegarde équipement:', error)
-      alert('Erreur de connexion. Vérifiez votre connexion internet.')
+      toast.error('Erreur de connexion. Vérifiez votre connexion internet.')
     }
   }
 
@@ -426,15 +428,15 @@ function Admin() {
       )
 
       if (response.ok) {
-        alert('Équipement supprimé')
+        toast.success('Équipement supprimé')
         loadEquipments()
       } else {
         const error = await response.json()
-        alert(`Erreur: ${error.detail || 'Erreur lors de la suppression'}`)
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de la suppression'}`)
       }
     } catch (error) {
       console.error('Erreur suppression équipement:', error)
-      alert('Erreur lors de la suppression')
+      toast.error('Erreur lors de la suppression')
     }
   }
 
@@ -475,7 +477,7 @@ function Admin() {
     try {
       const token = localStorage.getItem('token')
       if (!token) {
-        alert('Session expirée. Veuillez vous reconnecter.')
+        toast.error('Session expirée. Veuillez vous reconnecter.')
         navigate('/login')
         return
       }
@@ -496,7 +498,7 @@ function Admin() {
       })
 
       if (response.ok) {
-        alert(editingBuilding ? 'Bâtiment mis à jour' : 'Bâtiment créé')
+        toast.success(editingBuilding ? 'Bâtiment mis à jour' : 'Bâtiment créé')
         setShowBuildingForm(false)
         loadBuildings()
         if (activeTab === 'equipments') {
@@ -505,19 +507,19 @@ function Admin() {
       } else if (response.status === 401) {
         // Token expiré ou invalide
         localStorage.removeItem('token')
-        alert('Votre session a expiré. Veuillez vous reconnecter.')
+        toast.error('Votre session a expiré. Veuillez vous reconnecter.')
         window.location.href = '/login'
         return
       } else if (response.status === 403) {
-        alert('Accès refusé. Vous devez être administrateur.')
+        toast.error('Accès refusé. Vous devez être administrateur.')
         return
       } else {
         const errorData = await response.json().catch(() => ({ detail: 'Erreur lors de la sauvegarde' }))
-        alert(`Erreur: ${errorData.detail || 'Erreur lors de la sauvegarde'}`)
+        toast.error(`Erreur: ${errorData.detail || 'Erreur lors de la sauvegarde'}`)
       }
     } catch (error) {
       console.error('Erreur sauvegarde bâtiment:', error)
-      alert('Erreur de connexion. Vérifiez votre connexion internet.')
+      toast.error('Erreur de connexion. Vérifiez votre connexion internet.')
     }
   }
 
@@ -560,7 +562,7 @@ function Admin() {
     try {
       const token = localStorage.getItem('token')
       if (!token) {
-        alert('Session expirée. Veuillez vous reconnecter.')
+        toast.error('Session expirée. Veuillez vous reconnecter.')
         navigate('/login')
         return
       }
@@ -581,21 +583,21 @@ function Admin() {
       })
 
       if (response.ok) {
-        alert(editingCopro ? 'Copropriété mise à jour' : 'Copropriété créée')
+        toast.success(editingCopro ? 'Copropriété mise à jour' : 'Copropriété créée')
         setShowCoproForm(false)
         loadCopro()
       } else if (response.status === 401) {
         localStorage.removeItem('token')
-        alert('Votre session a expiré. Veuillez vous reconnecter.')
+        toast.error('Votre session a expiré. Veuillez vous reconnecter.')
         window.location.href = '/login'
         return
       } else {
         const errorData = await response.json().catch(() => ({ detail: 'Erreur lors de la sauvegarde' }))
-        alert(`Erreur: ${errorData.detail || 'Erreur lors de la sauvegarde'}`)
+        toast.error(`Erreur: ${errorData.detail || 'Erreur lors de la sauvegarde'}`)
       }
     } catch (error) {
       console.error('Erreur sauvegarde copropriété:', error)
-      alert('Erreur de connexion. Vérifiez votre connexion internet.')
+      toast.error('Erreur de connexion. Vérifiez votre connexion internet.')
     }
   }
 
@@ -617,18 +619,18 @@ function Admin() {
       )
 
       if (response.ok) {
-        alert('Bâtiment supprimé')
+        toast.success('Bâtiment supprimé')
         loadBuildings()
         if (activeTab === 'equipments') {
           loadEquipments()
         }
       } else {
         const error = await response.json()
-        alert(`Erreur: ${error.detail || 'Erreur lors de la suppression'}`)
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de la suppression'}`)
       }
     } catch (error) {
       console.error('Erreur suppression bâtiment:', error)
-      alert('Erreur lors de la suppression')
+      toast.error('Erreur lors de la suppression')
     }
   }
 
