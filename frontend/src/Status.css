@@ -117,6 +117,234 @@
   gap: 1rem;
 }
 
+/* Liste des bâtiments collapsables */
+.buildings-list-collapsable {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.building-collapsable {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+
+.building-collapsable:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.building-collapsable-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: #f8f9fa;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+  text-align: left;
+}
+
+.building-collapsable-header:hover {
+  background: #f1f3f5;
+}
+
+.building-collapsable-header.status-operational {
+  border-left: 4px solid #10b981;
+}
+
+.building-collapsable-header.status-degraded {
+  border-left: 4px solid #f59e0b;
+}
+
+.building-collapsable-header.status-partial {
+  border-left: 4px solid #f97316;
+}
+
+.building-collapsable-header.status-major {
+  border-left: 4px solid #ef4444;
+}
+
+.building-collapsable-header.status-maintenance {
+  border-left: 4px solid #6366f1;
+}
+
+.building-collapsable-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.building-name {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1d1c1d;
+}
+
+.building-count {
+  font-size: 0.875rem;
+  color: #616061;
+  font-weight: 400;
+}
+
+.building-collapsable-icon {
+  font-size: 0.875rem;
+  color: #616061;
+  transition: transform 0.2s;
+  margin-left: 1rem;
+}
+
+.building-collapsable-content {
+  padding: 0.75rem 1.25rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Service item en liste */
+.service-item-list {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.875rem 1rem;
+  background: #f8f9fa;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid #e5e7eb;
+  border-radius: 6px;
+  transition: all 0.2s;
+  gap: 1rem;
+}
+
+.service-item-list:hover {
+  background: #f1f3f5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.service-item-list.status-operational {
+  border-left-color: #10b981;
+  background: #f0fdf4;
+}
+
+.service-item-list.status-degraded {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.service-item-list.status-partial {
+  border-left-color: #f97316;
+  background: #fff7ed;
+}
+
+.service-item-list.status-major {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+
+.service-item-list.status-maintenance {
+  border-left-color: #6366f1;
+  background: #eef2ff;
+}
+
+.service-item-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.service-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.service-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #1d1c1d;
+  margin: 0;
+}
+
+.service-description {
+  font-size: 0.8125rem;
+  color: #616061;
+  margin: 0;
+}
+
+.service-status-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.05);
+  color: #616061;
+  margin-top: 0.25rem;
+  width: fit-content;
+}
+
+.status-btn-small {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.75rem;
+  border: 1px solid;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.status-btn-small:hover {
+  opacity: 0.8;
+  transform: translateY(-1px);
+}
+
+.status-btn-small.status-btn-active {
+  font-weight: 600;
+}
+
+/* Boutons admin pour les items de liste */
+.service-item-list.service-item-admin .service-status-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+
+.service-item-list.service-item-admin:hover .service-status-buttons {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (max-width: 768px) {
+  .service-item-list {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .service-item-content {
+    width: 100%;
+  }
+
+  .service-status-buttons {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .status-btn-small {
+    flex: 1 1 auto;
+    min-width: calc(50% - 0.25rem);
+  }
+}
+
 /* Groupe par bâtiment */
 .building-group {
   background: #f8f9fa;

@@ -9,6 +9,7 @@ function Status() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [expandedBuildings, setExpandedBuildings] = useState({})
 
   useEffect(() => {
     // Vérifier si l'utilisateur est admin
@@ -20,6 +21,18 @@ function Status() {
     const interval = setInterval(fetchStatus, 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // Initialiser les sections expandées quand les données sont chargées
+  useEffect(() => {
+    if (statusData && statusData.services) {
+      const buildings = new Set(statusData.services.map(s => s.building_name || 'Commun'))
+      const initialExpanded = {}
+      buildings.forEach(building => {
+        initialExpanded[building] = true // Toutes expandées par défaut
+      })
+      setExpandedBuildings(initialExpanded)
+    }
+  }, [statusData])
 
   const fetchStatus = async () => {
     try {
@@ -121,6 +134,22 @@ function Status() {
     { value: 'maintenance', label: 'Maintenance', color: '#6366f1' }
   ]
 
+  // Ordre de priorité des statuts pour le tri (du plus critique au moins critique)
+  const statusPriority = {
+    'major_outage': 1,
+    'partial_outage': 2,
+    'degraded': 3,
+    'maintenance': 4,
+    'operational': 5
+  }
+
+  const toggleBuilding = (buildingName) => {
+    setExpandedBuildings(prev => ({
+      ...prev,
+      [buildingName]: !prev[buildingName]
+    }))
+  }
+
   if (loading) {
     return (
       <div className="status-page">
@@ -148,7 +177,7 @@ function Status() {
   return (
     <div className="status-page">
       <div className="status-header">
-        <h1>Statut des Services</h1>
+        <h1>Statut des équipements et services de la copropriété</h1>
         {statusData.copro && (
           <div className="copro-info">
             <h3>{statusData.copro.name}</h3>
@@ -175,100 +204,106 @@ function Status() {
         <section className="services-section">
           <h2>Services</h2>
           {(() => {
-            // Grouper les services par bâtiment puis par type
-            const groupedServices = {}
-            const allOperational = statusData.services.every(s => s.status === 'operational')
+            // Grouper les services par bâtiment
+            const groupedByBuilding = {}
             
             statusData.services.forEach(service => {
               const buildingKey = service.building_name || 'Commun'
-              const typeKey = service.service_type_name || 'Autre'
               
-              if (!groupedServices[buildingKey]) {
-                groupedServices[buildingKey] = {}
+              if (!groupedByBuilding[buildingKey]) {
+                groupedByBuilding[buildingKey] = []
               }
-              if (!groupedServices[buildingKey][typeKey]) {
-                groupedServices[buildingKey][typeKey] = []
-              }
-              groupedServices[buildingKey][typeKey].push(service)
+              groupedByBuilding[buildingKey].push(service)
             })
             
             if (statusData.services.length === 0) {
               return <p className="no-services">Aucun service configuré</p>
             }
             
+            // Trier les bâtiments par le statut le plus critique
+            const sortedBuildings = Object.entries(groupedByBuilding).sort(([nameA, servicesA], [nameB, servicesB]) => {
+              const minPriorityA = Math.min(...servicesA.map(s => statusPriority[s.status] || 99))
+              const minPriorityB = Math.min(...servicesB.map(s => statusPriority[s.status] || 99))
+              if (minPriorityA !== minPriorityB) {
+                return minPriorityA - minPriorityB
+              }
+              return nameA.localeCompare(nameB)
+            })
+            
             return (
-              <div className={`services-container ${allOperational ? 'services-compact' : ''}`}>
-                {Object.entries(groupedServices).map(([buildingKey, types]) => (
-                  <div key={buildingKey} className="building-group">
-                    <h3 className="building-title">{buildingKey}</h3>
-                    <div className="building-group-types">
-                      {Object.entries(types).map(([typeKey, services]) => {
-                      const typeStatus = services.some(s => s.status !== 'operational') 
-                        ? services.find(s => s.status !== 'operational')?.status || 'operational'
-                        : 'operational'
-                      
-                      return (
-                        <div key={typeKey} className={`service-type-group ${allOperational ? 'type-compact' : ''}`}>
-                          {!allOperational && (
-                            <div className={`type-header ${getStatusClass(typeStatus)}`}>
-                              <span className="type-status-indicator"></span>
-                              <span className="type-name">{typeKey}</span>
-                              <span className="type-count">({services.length})</span>
-                            </div>
-                          )}
-                          <div className={`services-list ${allOperational ? 'services-list-compact' : ''}`}>
-                            {services.map((service) => (
-                              <div 
-                                key={service.id} 
-                                className={`service-item ${getStatusClass(service.status)} ${allOperational ? 'service-compact' : ''} ${isAdmin ? 'service-item-admin' : ''}`}
-                              >
-                                {!allOperational && (
-                                  <>
-                                    <div className="service-header">
-                                      <span className="service-status-indicator"></span>
-                                      <h4>{service.name}</h4>
-                                    </div>
-                                    {service.description && (
-                                      <p className="service-description">{service.description}</p>
-                                    )}
-                                    <div className="service-status">
-                                      {getStatusLabel(service.status)}
-                                    </div>
-                                  </>
-                                )}
-                                {allOperational && (
-                                  <div className="service-compact-content">
-                                    <span className="service-status-indicator service-indicator-small"></span>
-                                    <span className="service-name-compact">{service.name}</span>
-                                  </div>
-                                )}
-                                {isAdmin && (
-                                  <div className="service-status-buttons">
-                                    {statusOptions.map((option) => (
-                                      <button
-                                        key={option.value}
-                                        className={`status-btn ${service.status === option.value ? 'status-btn-active' : ''}`}
-                                        onClick={() => updateServiceStatus(service.id, option.value)}
-                                        style={{ 
-                                          borderColor: option.color,
-                                          color: service.status === option.value ? option.color : '#616061'
-                                        }}
-                                        title={option.label}
-                                      >
-                                        {option.label}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
+              <div className="buildings-list-collapsable">
+                {sortedBuildings.map(([buildingName, services]) => {
+                  // Trier les services par statut (priorité) puis par nom
+                  const sortedServices = [...services].sort((a, b) => {
+                    const priorityA = statusPriority[a.status] || 99
+                    const priorityB = statusPriority[b.status] || 99
+                    if (priorityA !== priorityB) {
+                      return priorityA - priorityB
+                    }
+                    return a.name.localeCompare(b.name)
+                  })
+                  
+                  const isExpanded = expandedBuildings[buildingName] !== false // Par défaut expanded
+                  const hasIssues = services.some(s => s.status !== 'operational')
+                  const worstStatus = sortedServices[0]?.status || 'operational'
+                  
+                  return (
+                    <div key={buildingName} className="building-collapsable">
+                      <button 
+                        className={`building-collapsable-header ${getStatusClass(worstStatus)}`}
+                        onClick={() => toggleBuilding(buildingName)}
+                      >
+                        <span className="building-collapsable-title">
+                          <span className="status-indicator"></span>
+                          <span className="building-name">{buildingName}</span>
+                          <span className="building-count">({services.length})</span>
+                        </span>
+                        <span className="building-collapsable-icon">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
+                      </button>
+                      {isExpanded && (
+                        <div className="building-collapsable-content">
+                          {sortedServices.map((service) => (
+                            <div 
+                              key={service.id} 
+                              className={`service-item-list ${getStatusClass(service.status)} ${isAdmin ? 'service-item-admin' : ''}`}
+                            >
+                              <div className="service-item-content">
+                                <span className="service-status-indicator"></span>
+                                <div className="service-info">
+                                  <h4 className="service-name">{service.name}</h4>
+                                  {service.description && (
+                                    <p className="service-description">{service.description}</p>
+                                  )}
+                                  <span className="service-status-badge">{getStatusLabel(service.status)}</span>
+                                </div>
                               </div>
-                            ))}
-                          </div>
+                              {isAdmin && (
+                                <div className="service-status-buttons">
+                                  {statusOptions.map((option) => (
+                                    <button
+                                      key={option.value}
+                                      className={`status-btn-small ${service.status === option.value ? 'status-btn-active' : ''}`}
+                                      onClick={() => updateServiceStatus(service.id, option.value)}
+                                      style={{ 
+                                        borderColor: option.color,
+                                        color: service.status === option.value ? option.color : '#616061'
+                                      }}
+                                      title={option.label}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      )
-                    })}
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )
           })()}
