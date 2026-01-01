@@ -14,11 +14,11 @@ class ServiceStatus(PyEnum):
 
 
 class IncidentStatus(PyEnum):
-    INVESTIGATING = "investigating"
-    IDENTIFIED = "identified"
-    MONITORING = "monitoring"
-    RESOLVED = "resolved"
-    SCHEDULED = "scheduled"
+    INVESTIGATING = "investigating"  # En cours d'analyse
+    IN_PROGRESS = "in_progress"  # En cours de traitement
+    RESOLVED = "resolved"  # Résolu
+    CLOSED = "closed"  # Clos (visible dans les incidents passés)
+    SCHEDULED = "scheduled"  # Planifié
 
 
 class Service(Base):
@@ -62,6 +62,7 @@ class Incident(Base):
     service = relationship("Service", back_populates="incidents")  # DEPRECATED
     service_instance = relationship("ServiceInstance", back_populates="incidents")
     updates = relationship("IncidentUpdate", back_populates="incident", cascade="all, delete-orphan", order_by="IncidentUpdate.created_at")
+    comments = relationship("IncidentComment", back_populates="incident", cascade="all, delete-orphan", order_by="IncidentComment.created_at")
 
 
 class IncidentUpdate(Base):
@@ -76,4 +77,19 @@ class IncidentUpdate(Base):
 
     # Relationships
     incident = relationship("Incident", back_populates="updates")
+
+
+class IncidentComment(Base):
+    """Commentaires des administrateurs sur un incident"""
+    __tablename__ = "incident_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=False, index=True)
+    admin_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    comment = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    incident = relationship("Incident", back_populates="comments")
+    admin = relationship("User")
 

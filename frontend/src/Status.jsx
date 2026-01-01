@@ -37,9 +37,9 @@ function Status() {
       major_outage: 'status-major',
       maintenance: 'status-maintenance',
       investigating: 'incident-investigating',
-      identified: 'incident-identified',
-      monitoring: 'incident-monitoring',
+      in_progress: 'incident-in_progress',
       resolved: 'incident-resolved',
+      closed: 'incident-closed',
       scheduled: 'incident-scheduled'
     }
     return statusMap[status] || 'status-unknown'
@@ -47,16 +47,16 @@ function Status() {
 
   const getStatusLabel = (status) => {
     const labelMap = {
-      operational: 'Operational',
-      degraded: 'Degraded Performance',
-      partial_outage: 'Partial Outage',
-      major_outage: 'Major Outage',
-      maintenance: 'Under Maintenance',
-      investigating: 'Investigating',
-      identified: 'Identified',
-      monitoring: 'Monitoring',
-      resolved: 'Resolved',
-      scheduled: 'Scheduled'
+      operational: 'Opérationnel',
+      degraded: 'Performance dégradée',
+      partial_outage: 'Panne partielle',
+      major_outage: 'Panne majeure',
+      maintenance: 'En maintenance',
+      investigating: 'En cours d\'analyse',
+      in_progress: 'En cours de traitement',
+      resolved: 'Résolu',
+      closed: 'Clos',
+      scheduled: 'Planifié'
     }
     return labelMap[status] || status
   }
@@ -132,43 +132,86 @@ function Status() {
         </section>
 
         <section className="incidents-section">
-          <h2>Incidents Récents</h2>
-          {statusData.incidents.length > 0 ? (
-            <div className="incidents-list">
-              {statusData.incidents.map((incident) => (
-                <div key={incident.id} className={`incident-card ${getStatusClass(incident.status)}`}>
-                  <div className="incident-header">
-                    <h3>{incident.title}</h3>
-                    <span className={`incident-status ${getStatusClass(incident.status)}`}>
-                      {getStatusLabel(incident.status)}
-                    </span>
-                  </div>
-                  {incident.message && (
-                    <p className="incident-message">{incident.message}</p>
-                  )}
-                  <div className="incident-meta">
-                    <span>{formatDate(incident.created_at)}</span>
-                    {incident.resolved_at && (
-                      <span className="resolved">Résolu le {formatDate(incident.resolved_at)}</span>
+          <h2>Incidents en Cours</h2>
+          {(() => {
+            const activeIncidents = statusData.incidents.filter(i => i.status !== 'closed' && i.status !== 'resolved')
+            return activeIncidents.length > 0 ? (
+              <div className="incidents-list">
+                {activeIncidents.map((incident) => (
+                  <div key={incident.id} className={`incident-card ${getStatusClass(incident.status)}`}>
+                    <div className="incident-header">
+                      <h3>{incident.title}</h3>
+                      <span className={`incident-status ${getStatusClass(incident.status)}`}>
+                        {getStatusLabel(incident.status)}
+                      </span>
+                    </div>
+                    {incident.message && (
+                      <p className="incident-message">{incident.message}</p>
+                    )}
+                    <div className="incident-meta">
+                      <span>Créé le {formatDate(incident.created_at)}</span>
+                    </div>
+                    {incident.updates && incident.updates.length > 0 && (
+                      <div className="incident-updates">
+                        <h4>Mises à jour:</h4>
+                        {incident.updates.map((update) => (
+                          <div key={update.id} className="incident-update">
+                            <span className="update-time">{formatDate(update.created_at)}</span>
+                            <p>{update.message}</p>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  {incident.updates && incident.updates.length > 0 && (
-                    <div className="incident-updates">
-                      <h4>Mises à jour:</h4>
-                      {incident.updates.map((update) => (
-                        <div key={update.id} className="incident-update">
-                          <span className="update-time">{formatDate(update.created_at)}</span>
-                          <p>{update.message}</p>
-                        </div>
-                      ))}
+                ))}
+              </div>
+            ) : (
+              <p className="no-incidents">Aucun incident en cours. Tous les systèmes fonctionnent normalement.</p>
+            )
+          })()}
+        </section>
+
+        <section className="incidents-section incidents-past">
+          <h2>Incidents Passés</h2>
+          {(() => {
+            const pastIncidents = statusData.incidents.filter(i => i.status === 'closed' || i.status === 'resolved')
+            return pastIncidents.length > 0 ? (
+              <div className="incidents-list">
+                {pastIncidents.map((incident) => (
+                  <div key={incident.id} className={`incident-card incident-past ${getStatusClass(incident.status)}`}>
+                    <div className="incident-header">
+                      <h3>{incident.title}</h3>
+                      <span className={`incident-status ${getStatusClass(incident.status)}`}>
+                        {getStatusLabel(incident.status)}
+                      </span>
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="no-incidents">Aucun incident récent. Tous les systèmes fonctionnent normalement.</p>
-          )}
+                    {incident.message && (
+                      <p className="incident-message">{incident.message}</p>
+                    )}
+                    <div className="incident-meta">
+                      <span>Créé le {formatDate(incident.created_at)}</span>
+                      {incident.resolved_at && (
+                        <span className="resolved">Résolu le {formatDate(incident.resolved_at)}</span>
+                      )}
+                    </div>
+                    {incident.updates && incident.updates.length > 0 && (
+                      <div className="incident-updates">
+                        <h4>Mises à jour:</h4>
+                        {incident.updates.map((update) => (
+                          <div key={update.id} className="incident-update">
+                            <span className="update-time">{formatDate(update.created_at)}</span>
+                            <p>{update.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="no-incidents">Aucun incident passé.</p>
+            )
+          })()}
         </section>
       </div>
     </div>

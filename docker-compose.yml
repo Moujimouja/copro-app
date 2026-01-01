@@ -14,6 +14,7 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://copro:copro_password@db:5432/copro_app
+      - INIT_TEST_DATA=true
     ports:
       - "8000:8000"
     depends_on:
