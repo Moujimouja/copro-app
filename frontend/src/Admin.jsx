@@ -602,7 +602,7 @@ function Admin() {
   }
 
   const handleDeleteEquipment = async (equipmentId) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet équipement ?')) {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cet équipement ?')) {
       return
     }
 
@@ -1003,62 +1003,83 @@ function Admin() {
             </div>
           )}
 
-          <div className="equipments-grid">
-            {equipments.map(equipment => (
-              <div key={equipment.id} className={`equipment-card ${getStatusClass(equipment.status)}`}>
-                <div className="equipment-header">
-                  <h3>{equipment.name}</h3>
-                  <span className={`status-badge ${getStatusClass(equipment.status)}`}>
-                    {getStatusLabel(equipment.status)}
-                  </span>
-                </div>
-                <div className="equipment-info">
-                  <p><strong>Bâtiment:</strong> {equipment.building_name}</p>
-                  <p><strong>Type:</strong> {equipment.service_type_name}</p>
-                  {equipment.location && <p><strong>Localisation:</strong> {equipment.location}</p>}
-                </div>
-                <div className="equipment-actions">
-                  <div className="action-buttons">
-                    <button
-                      onClick={() => openEditForm(equipment)}
-                      className="btn-edit"
-                    >
-                      ✏️ Modifier
-                    </button>
-                    <button
-                      onClick={() => handleDeleteEquipment(equipment.id)}
-                      className="btn-delete"
-                    >
-                      🗑️ Supprimer
-                    </button>
-                  </div>
-                  <label>Changer le statut:</label>
-                  <select
-                    value={equipment.status}
-                    onChange={(e) => updateEquipmentStatus(equipment.id, e.target.value)}
-                  >
-                    <option value="operational">Opérationnel</option>
-                    <option value="degraded">Dégradé</option>
-                    <option value="partial_outage">Panne partielle</option>
-                    <option value="major_outage">Panne majeure</option>
-                    <option value="maintenance">Maintenance</option>
-                  </select>
-                  <button
-                    onClick={() => {
-                      const title = prompt('Titre de l\'incident:')
-                      const message = prompt('Description de l\'incident:')
-                      if (title && message) {
-                        createIncident(equipment.id, title, message)
-                      }
-                    }}
-                    className="btn-create-incident"
-                  >
-                    Créer un incident
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="equipments-table-container">
+            <table className="equipments-table">
+              <thead>
+                <tr>
+                  <th>Nom</th>
+                  <th>Bâtiment</th>
+                  <th>Type</th>
+                  <th>Localisation</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {equipments.map(equipment => (
+                  <tr key={equipment.id} className={`equipment-row ${getStatusClass(equipment.status)}`}>
+                    <td className="equipment-name">{equipment.name}</td>
+                    <td>{equipment.building_name}</td>
+                    <td>{equipment.service_type_name}</td>
+                    <td>{equipment.location || '-'}</td>
+                    <td>
+                      <select
+                        value={equipment.status}
+                        onChange={(e) => updateEquipmentStatus(equipment.id, e.target.value)}
+                        className="status-select"
+                      >
+                        <option value="operational">Opérationnel</option>
+                        <option value="degraded">Dégradé</option>
+                        <option value="partial_outage">Panne partielle</option>
+                        <option value="major_outage">Panne majeure</option>
+                        <option value="maintenance">Maintenance</option>
+                      </select>
+                    </td>
+                    <td className="equipment-actions-cell">
+                      <div className="action-icons">
+                        <button
+                          onClick={() => openEditForm(equipment)}
+                          className="icon-btn icon-btn-edit"
+                          title="Modifier"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Êtes-vous sûr de vouloir supprimer l'équipement "${equipment.name}" ?`)) {
+                              handleDeleteEquipment(equipment.id)
+                            }
+                          }}
+                          className="icon-btn icon-btn-delete"
+                          title="Supprimer"
+                        >
+                          🗑️
+                        </button>
+                        <button
+                          onClick={() => {
+                            const title = window.prompt('Titre de l\'incident:')
+                            if (title) {
+                              const message = window.prompt('Description de l\'incident:')
+                              if (message) {
+                                createIncident(equipment.id, title, message)
+                              }
+                            }
+                          }}
+                          className="icon-btn icon-btn-incident"
+                          title="Créer un incident"
+                        >
+                          ⚠️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+          {equipments.length === 0 && (
+            <p className="no-equipments">Aucun équipement configuré</p>
+          )}
         </div>
       )}
 
