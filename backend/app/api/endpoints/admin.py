@@ -15,6 +15,7 @@ from app.models.copro import Copro, Building, ServiceInstance
 from app.models.status import Incident, IncidentUpdate, IncidentComment, IncidentStatus
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
+from app.models.maintenance import Maintenance
 from app.auth import get_current_user, get_password_hash
 
 router = APIRouter()
@@ -1247,3 +1248,249 @@ async def delete_user(
     
     return {"message": "Utilisateur supprimé"}
 
+
+# ============ Gestion des Maintenances ============
+
+class MaintenanceCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    start_date: datetime
+    end_date: datetime
+    service_instance_ids: List[int]  # Liste des IDs des équipements concernés
+
+
+class MaintenanceUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    service_instance_ids: Optional[List[int]] = None
+
+
+class MaintenanceResponse(BaseModel):
+    id: int
+    copro_id: int
+    title: str
+    description: Optional[str]
+    start_date: datetime
+    end_date: datetime
+    created_at: datetime
+    updated_at: Optional[datetime]
+    service_instances: List[dict]  # Liste des équipements concernés
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/maintenances", response_model=List[MaintenanceResponse])
+async def list_maintenances(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Lister toutes les maintenances (admin uniquement)"""
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        return []
+    
+    maintenances = db.query(Maintenance).filter(
+        Maintenance.copro_id == copro.id
+    ).order_by(Maintenance.start_date.desc()).all()
+    
+    result = []
+    for maintenance in maintenances:
+        db.refresh(maintenance, ['service_instances'])
+        result.append(MaintenanceResponse(
+            id=maintenance.id,
+            copro_id=maintenance.copro_id,
+            title=maintenance.title,
+            description=maintenance.description,
+            start_date=maintenance.start_date,
+            end_date=maintenance.end_date,
+            created_at=maintenance.created_at,
+            updated_at=maintenance.updated_at,
+            service_instances=[
+                {
+                    "id": si.id,
+                    "name": si.name,
+                    "building_name": si.building.name if si.building else None
+                }
+                for si in maintenance.service_instances
+            ]
+        ))
+    
+    return result
+
+
+@router.get("/maintenances/{maintenance_id}", response_model=MaintenanceResponse)
+async def get_maintenance(
+    maintenance_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Obtenir une maintenance par ID (admin uniquement)"""
+    maintenance = db.query(Maintenance).filter(Maintenance.id == maintenance_id).first()
+    if not maintenance:
+        raise HTTPException(status_code=404, detail="Maintenance non trouvée")
+    
+    db.refresh(maintenance, ['service_instances'])
+    return MaintenanceResponse(
+        id=maintenance.id,
+        copro_id=maintenance.copro_id,
+        title=maintenance.title,
+        description=maintenance.description,
+        start_date=maintenance.start_date,
+        end_date=maintenance.end_date,
+        created_at=maintenance.created_at,
+        updated_at=maintenance.updated_at,
+        service_instances=[
+            {
+                "id": si.id,
+                "name": si.name,
+                "building_name": si.building.name if si.building else None
+            }
+            for si in maintenance.service_instances
+        ]
+    )
+
+
+@router.post("/maintenances", response_model=MaintenanceResponse, status_code=status.HTTP_201_CREATED)
+async def create_maintenance(
+    maintenance_data: MaintenanceCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Créer une nouvelle maintenance (admin uniquement)"""
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        raise HTTPException(status_code=404, detail="Aucune copropriété configurée")
+    
+    # Vérifier que la date de fin est après la date de début
+    if maintenance_data.end_date <= maintenance_data.start_date:
+        raise HTTPException(status_code=400, detail="La date de fin doit être après la date de début")
+    
+    # Vérifier que les équipements existent et appartiennent à la copropriété
+    service_instances = db.query(ServiceInstance).filter(
+        ServiceInstance.id.in_(maintenance_data.service_instance_ids),
+        ServiceInstance.copro_id == copro.id
+    ).all()
+    
+    if len(service_instances) != len(maintenance_data.service_instance_ids):
+        raise HTTPException(status_code=404, detail="Un ou plusieurs équipements non trouvés")
+    
+    # Créer la maintenance
+    maintenance = Maintenance(
+        copro_id=copro.id,
+        title=maintenance_data.title,
+        description=maintenance_data.description,
+        start_date=maintenance_data.start_date,
+        end_date=maintenance_data.end_date
+    )
+    db.add(maintenance)
+    db.flush()
+    
+    # Associer les équipements
+    maintenance.service_instances = service_instances
+    db.commit()
+    db.refresh(maintenance, ['service_instances'])
+    
+    return MaintenanceResponse(
+        id=maintenance.id,
+        copro_id=maintenance.copro_id,
+        title=maintenance.title,
+        description=maintenance.description,
+        start_date=maintenance.start_date,
+        end_date=maintenance.end_date,
+        created_at=maintenance.created_at,
+        updated_at=maintenance.updated_at,
+        service_instances=[
+            {
+                "id": si.id,
+                "name": si.name,
+                "building_name": si.building.name if si.building else None
+            }
+            for si in maintenance.service_instances
+        ]
+    )
+
+
+@router.put("/maintenances/{maintenance_id}", response_model=MaintenanceResponse)
+async def update_maintenance(
+    maintenance_id: int,
+    maintenance_update: MaintenanceUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Mettre à jour une maintenance (admin uniquement)"""
+    maintenance = db.query(Maintenance).filter(Maintenance.id == maintenance_id).first()
+    if not maintenance:
+        raise HTTPException(status_code=404, detail="Maintenance non trouvée")
+    
+    update_data = maintenance_update.dict(exclude_unset=True)
+    
+    # Vérifier les dates si fournies
+    start_date = update_data.get('start_date', maintenance.start_date)
+    end_date = update_data.get('end_date', maintenance.end_date)
+    if end_date <= start_date:
+        raise HTTPException(status_code=400, detail="La date de fin doit être après la date de début")
+    
+    # Mettre à jour les champs
+    if 'title' in update_data:
+        maintenance.title = update_data['title']
+    if 'description' in update_data:
+        maintenance.description = update_data['description']
+    if 'start_date' in update_data:
+        maintenance.start_date = update_data['start_date']
+    if 'end_date' in update_data:
+        maintenance.end_date = update_data['end_date']
+    
+    # Mettre à jour les équipements si fournis
+    if 'service_instance_ids' in update_data:
+        copro = db.query(Copro).filter(Copro.id == maintenance.copro_id).first()
+        service_instances = db.query(ServiceInstance).filter(
+            ServiceInstance.id.in_(update_data['service_instance_ids']),
+            ServiceInstance.copro_id == copro.id
+        ).all()
+        
+        if len(service_instances) != len(update_data['service_instance_ids']):
+            raise HTTPException(status_code=404, detail="Un ou plusieurs équipements non trouvés")
+        
+        maintenance.service_instances = service_instances
+    
+    maintenance.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(maintenance, ['service_instances'])
+    
+    return MaintenanceResponse(
+        id=maintenance.id,
+        copro_id=maintenance.copro_id,
+        title=maintenance.title,
+        description=maintenance.description,
+        start_date=maintenance.start_date,
+        end_date=maintenance.end_date,
+        created_at=maintenance.created_at,
+        updated_at=maintenance.updated_at,
+        service_instances=[
+            {
+                "id": si.id,
+                "name": si.name,
+                "building_name": si.building.name if si.building else None
+            }
+            for si in maintenance.service_instances
+        ]
+    )
+
+
+@router.delete("/maintenances/{maintenance_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_maintenance(
+    maintenance_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Supprimer une maintenance (admin uniquement)"""
+    maintenance = db.query(Maintenance).filter(Maintenance.id == maintenance_id).first()
+    if not maintenance:
+        raise HTTPException(status_code=404, detail="Maintenance non trouvée")
+    
+    db.delete(maintenance)
+    db.commit()
+    return None

@@ -28,6 +28,7 @@ class Copro(Base):
     # Relationships
     buildings = relationship("Building", back_populates="copro", cascade="all, delete-orphan")
     users = relationship("User", back_populates="copro")
+    maintenances = relationship("Maintenance", back_populates="copro", cascade="all, delete-orphan")
 
 
 class Building(Base):
@@ -85,6 +86,11 @@ class ServiceInstance(Base):
     # Relationships
     building = relationship("Building", back_populates="service_instances")
     incidents = relationship("Incident", back_populates="service_instance", cascade="all, delete-orphan")
+    maintenances = relationship(
+        "Maintenance",
+        secondary="maintenance_service_instances",
+        back_populates="service_instances"
+    )
 
     # Unique constraint: nom unique par copropriété
     __table_args__ = (

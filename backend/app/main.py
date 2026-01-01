@@ -4,7 +4,7 @@ from app.core.config import settings
 from app.db import engine, Base, SessionLocal
 from app.api import api_router
 # Import models to ensure tables are created
-from app.models import User, Service, Incident, IncidentUpdate, IncidentComment, Copro, Building, ServiceInstance, Ticket
+from app.models import User, Service, Incident, IncidentUpdate, IncidentComment, Copro, Building, ServiceInstance, Ticket, Maintenance
 import os
 
 # Create database tables

@@ -6,6 +6,7 @@ from datetime import datetime
 from app.db import get_db
 from app.models.status import Service, Incident, IncidentUpdate, ServiceStatus, IncidentStatus
 from app.models.copro import ServiceInstance, Copro
+from app.models.maintenance import Maintenance
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -102,9 +103,23 @@ class CoproInfo(BaseModel):
         from_attributes = True
 
 
+class MaintenanceTimelineResponse(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    start_date: datetime
+    end_date: datetime
+    service_instance_ids: List[int]
+    type: str = "maintenance"  # Pour distinguer des incidents dans la timeline
+
+    class Config:
+        from_attributes = True
+
+
 class StatusPageResponse(BaseModel):
     services: List[ServiceResponse]
     incidents: List[IncidentResponse]
+    maintenances: List[MaintenanceTimelineResponse] = []  # Maintenances actives
     overall_status: str  # Overall system status
     copro: Optional[CoproInfo] = None
 
@@ -135,6 +150,7 @@ async def get_status_page(db: Session = Depends(get_db)):
         return {
             "services": [],
             "incidents": [],
+            "maintenances": [],
             "overall_status": "operational",
             "copro": None
         }
@@ -150,11 +166,42 @@ async def get_status_page(db: Session = Depends(get_db)):
         Incident.copro_id == copro.id
     ).order_by(desc(Incident.created_at)).limit(20).all()
     
-    # Calculate overall status
+    # Get active maintenances (maintenances dont la date actuelle est entre start_date et end_date)
+    now = datetime.utcnow()
+    active_maintenances = db.query(Maintenance).filter(
+        Maintenance.copro_id == copro.id,
+        Maintenance.start_date <= now,
+        Maintenance.end_date >= now
+    ).all()
+    
+    # Créer un set des IDs d'équipements en maintenance
+    equipment_ids_in_maintenance = set()
+    maintenances_data = []
+    for maintenance in active_maintenances:
+        db.refresh(maintenance, ['service_instances'])
+        service_instance_ids = [si.id for si in maintenance.service_instances]
+        equipment_ids_in_maintenance.update(service_instance_ids)
+        maintenances_data.append(MaintenanceTimelineResponse(
+            id=maintenance.id,
+            title=maintenance.title,
+            description=maintenance.description,
+            start_date=maintenance.start_date,
+            end_date=maintenance.end_date,
+            service_instance_ids=service_instance_ids
+        ))
+    
+    # Calculate overall status (prendre en compte les maintenances actives)
     if not service_instances:
         overall_status = "operational"
     else:
-        statuses = [si.status for si in service_instances]
+        # Construire la liste des statuts en incluant "maintenance" pour les équipements en maintenance active
+        statuses = []
+        for si in service_instances:
+            if si.id in equipment_ids_in_maintenance:
+                statuses.append("maintenance")
+            else:
+                statuses.append(si.status)
+        
         if "major_outage" in statuses:
             overall_status = "major_outage"
         elif "partial_outage" in statuses:
@@ -177,11 +224,16 @@ async def get_status_page(db: Session = Depends(get_db)):
             # Extraire la partie avant les parenthèses
             display_name = si.name.split('(')[0].strip()
         
+        # Si l'équipement est en maintenance active, forcer le statut à "maintenance"
+        equipment_status = si.status
+        if si.id in equipment_ids_in_maintenance:
+            equipment_status = "maintenance"
+        
         services_data.append(ServiceResponse(
             id=si.id,
             name=display_name,
             description=si.description,
-            status=si.status,
+            status=equipment_status,
             order=si.order,
             building_id=si.building_id,
             building_name=si.building.name if si.building else None
@@ -190,6 +242,7 @@ async def get_status_page(db: Session = Depends(get_db)):
     return {
         "services": services_data,
         "incidents": [IncidentResponse.from_incident(i) for i in incidents],
+        "maintenances": maintenances_data,
         "overall_status": overall_status,
         "copro": CoproInfo(
             id=copro.id,

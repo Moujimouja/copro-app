@@ -14,6 +14,17 @@ function Admin() {
   const [copro, setCopro] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('copro')
+  const [maintenances, setMaintenances] = useState([])
+  const [showMaintenanceForm, setShowMaintenanceForm] = useState(false)
+  const [editingMaintenance, setEditingMaintenance] = useState(null)
+  const [maintenanceFormData, setMaintenanceFormData] = useState({
+    title: '',
+    description: '',
+    start_date: '',
+    end_date: '',
+    service_instance_ids: []
+  })
+  const [equipmentSearch, setEquipmentSearch] = useState('')
   const [users, setUsers] = useState([])
   const [showUserForm, setShowUserForm] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
@@ -265,6 +276,32 @@ function Admin() {
     }
   }, [])
 
+  const loadMaintenances = useCallback(async () => {
+    try {
+      setLoading(true)
+      const token = localStorage.getItem('token')
+      if (!token) {
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/v1/admin/maintenances`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setMaintenances(data)
+      } else if (response.status === 401) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+        return
+      }
+    } catch (error) {
+      console.error('Erreur chargement maintenances:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   // useEffect après toutes les déclarations de fonctions
   useEffect(() => {
     // Vérifier l'authentification
@@ -295,8 +332,11 @@ function Admin() {
     } else if (activeTab === 'users') {
       loadUsers()
       loadBuildings()
+    } else if (activeTab === 'maintenances') {
+      loadMaintenances()
+      loadEquipments()
     }
-  }, [activeTab, loadEquipments, loadBuildings, loadTickets, loadCopro, loadIncidents, loadUsers, loadAdmins, navigate])
+  }, [activeTab, loadEquipments, loadBuildings, loadTickets, loadCopro, loadIncidents, loadUsers, loadAdmins, loadMaintenances, navigate])
 
   const updateEquipmentStatus = async (equipmentId, newStatus) => {
     try {
@@ -1003,6 +1043,169 @@ function Admin() {
     }
   }
 
+  // ============ Gestion des Maintenances ============
+
+  const openCreateMaintenanceForm = () => {
+    setEditingMaintenance(null)
+    setMaintenanceFormData({
+      title: '',
+      description: '',
+      start_date: '',
+      end_date: '',
+      service_instance_ids: []
+    })
+    setEquipmentSearch('')
+    setShowMaintenanceForm(true)
+  }
+
+  const openEditMaintenanceForm = (maintenance) => {
+    setEditingMaintenance(maintenance)
+    // Convertir les dates au format datetime-local (YYYY-MM-DDTHH:mm)
+    const startDate = new Date(maintenance.start_date)
+    const endDate = new Date(maintenance.end_date)
+    const formatDateTime = (date) => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+      return `${year}-${month}-${day}T${hours}:${minutes}`
+    }
+    setMaintenanceFormData({
+      title: maintenance.title || '',
+      description: maintenance.description || '',
+      start_date: formatDateTime(startDate),
+      end_date: formatDateTime(endDate),
+      service_instance_ids: maintenance.service_instances.map(si => si.id)
+    })
+    setEquipmentSearch('')
+    setShowMaintenanceForm(true)
+  }
+
+  const toggleSelectAllEquipments = () => {
+    if (maintenanceFormData.service_instance_ids.length === equipments.length) {
+      setMaintenanceFormData(prev => ({
+        ...prev,
+        service_instance_ids: []
+      }))
+    } else {
+      setMaintenanceFormData(prev => ({
+        ...prev,
+        service_instance_ids: equipments.map(eq => eq.id)
+      }))
+    }
+  }
+
+  const removeEquipment = (equipmentId) => {
+    setMaintenanceFormData(prev => ({
+      ...prev,
+      service_instance_ids: prev.service_instance_ids.filter(id => id !== equipmentId)
+    }))
+  }
+
+  const handleMaintenanceFormChange = (e) => {
+    const { name, value, type, checked } = e.target
+    if (type === 'checkbox') {
+      const equipmentId = parseInt(value)
+      setMaintenanceFormData(prev => ({
+        ...prev,
+        service_instance_ids: checked
+          ? [...prev.service_instance_ids, equipmentId]
+          : prev.service_instance_ids.filter(id => id !== equipmentId)
+      }))
+    } else {
+      setMaintenanceFormData(prev => ({
+        ...prev,
+        [name]: value
+      }))
+    }
+  }
+
+  const handleSubmitMaintenance = async (e) => {
+    e.preventDefault()
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Session expirée. Veuillez vous reconnecter.')
+        navigate('/login')
+        return
+      }
+
+      // Convertir les dates en format ISO
+      const startDate = new Date(maintenanceFormData.start_date)
+      const endDate = new Date(maintenanceFormData.end_date)
+
+      const dataToSend = {
+        title: maintenanceFormData.title,
+        description: maintenanceFormData.description || null,
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString(),
+        service_instance_ids: maintenanceFormData.service_instance_ids
+      }
+
+      const url = editingMaintenance
+        ? `${API_URL}/api/v1/admin/maintenances/${editingMaintenance.id}`
+        : `${API_URL}/api/v1/admin/maintenances`
+      
+      const method = editingMaintenance ? 'PUT' : 'POST'
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(dataToSend)
+      })
+
+      if (response.ok) {
+        toast.success(editingMaintenance ? 'Maintenance mise à jour' : 'Maintenance créée')
+        setShowMaintenanceForm(false)
+        loadMaintenances()
+      } else if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('token')
+        toast.error('Session expirée. Veuillez vous reconnecter.')
+        navigate('/login')
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Erreur lors de la sauvegarde' }))
+        toast.error(`Erreur: ${errorData.detail || 'Erreur lors de la sauvegarde'}`)
+      }
+    } catch (error) {
+      console.error('Erreur sauvegarde maintenance:', error)
+      toast.error('Erreur de connexion. Vérifiez votre connexion internet.')
+    }
+  }
+
+  const handleDeleteMaintenance = async (maintenanceId) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette maintenance ?')) {
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${API_URL}/api/v1/admin/maintenances/${maintenanceId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+
+      if (response.ok) {
+        toast.success('Maintenance supprimée')
+        loadMaintenances()
+      } else {
+        const error = await response.json()
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de la suppression'}`)
+      }
+    } catch (error) {
+      console.error('Erreur suppression maintenance:', error)
+      toast.error('Erreur lors de la suppression')
+    }
+  }
+
   const handleDeleteUser = async (userId) => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
       return
@@ -1079,6 +1282,12 @@ function Admin() {
           onClick={() => setActiveTab('users')}
         >
           Utilisateurs
+        </button>
+        <button 
+          className={activeTab === 'maintenances' ? 'active' : ''}
+          onClick={() => setActiveTab('maintenances')}
+        >
+          Maintenances
         </button>
       </div>
 
@@ -1976,6 +2185,246 @@ function Admin() {
             </table>
             {users.length === 0 && (
               <p className="no-equipments">Aucun utilisateur configuré.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'maintenances' && (
+        <div className="maintenances-section">
+          <div className="section-header">
+            <h2>Gestion des Maintenances</h2>
+            <button onClick={openCreateMaintenanceForm} className="btn-create">
+              + Créer une maintenance
+            </button>
+          </div>
+
+          {showMaintenanceForm && (
+            <div className="modal-overlay" onClick={() => setShowMaintenanceForm(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>{editingMaintenance ? 'Modifier la maintenance' : 'Créer une maintenance'}</h3>
+                  <button className="btn-close" onClick={() => setShowMaintenanceForm(false)}>×</button>
+                </div>
+                <form onSubmit={handleSubmitMaintenance} className="equipment-form">
+                  <div className="form-group">
+                    <label>Titre *</label>
+                    <input
+                      type="text"
+                      name="title"
+                      value={maintenanceFormData.title}
+                      onChange={handleMaintenanceFormChange}
+                      required
+                      placeholder="Ex: Maintenance ascenseur Bâtiment A"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Description</label>
+                    <textarea
+                      name="description"
+                      value={maintenanceFormData.description}
+                      onChange={handleMaintenanceFormChange}
+                      rows="3"
+                      placeholder="Description de la maintenance..."
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Date et heure de début *</label>
+                    <input
+                      type="datetime-local"
+                      name="start_date"
+                      value={maintenanceFormData.start_date}
+                      onChange={handleMaintenanceFormChange}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Date et heure de fin *</label>
+                    <input
+                      type="datetime-local"
+                      name="end_date"
+                      value={maintenanceFormData.end_date}
+                      onChange={handleMaintenanceFormChange}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>
+                      Équipements concernés *
+                      {maintenanceFormData.service_instance_ids.length > 0 && (
+                        <span className="selected-count">
+                          ({maintenanceFormData.service_instance_ids.length} sélectionné{maintenanceFormData.service_instance_ids.length > 1 ? 's' : ''})
+                        </span>
+                      )}
+                    </label>
+                    
+                    {/* Équipements sélectionnés (tags) */}
+                    {maintenanceFormData.service_instance_ids.length > 0 && (
+                      <div className="selected-equipments-tags">
+                        {maintenanceFormData.service_instance_ids.map(equipmentId => {
+                          const equipment = equipments.find(eq => eq.id === equipmentId)
+                          if (!equipment) return null
+                          return (
+                            <span key={equipmentId} className="equipment-tag">
+                              {equipment.name}
+                              {equipment.building_name && <span className="tag-building"> ({equipment.building_name})</span>}
+                              <button
+                                type="button"
+                                onClick={() => removeEquipment(equipmentId)}
+                                className="tag-remove"
+                                title="Retirer"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Zone de recherche et sélection */}
+                    <div className="equipment-multiselect">
+                      <div className="multiselect-header">
+                        <input
+                          type="text"
+                          placeholder="Rechercher un équipement..."
+                          value={equipmentSearch}
+                          onChange={(e) => setEquipmentSearch(e.target.value)}
+                          className="equipment-search-input"
+                        />
+                        <button
+                          type="button"
+                          onClick={toggleSelectAllEquipments}
+                          className="btn-select-all"
+                        >
+                          {maintenanceFormData.service_instance_ids.length === equipments.length
+                            ? 'Tout désélectionner'
+                            : 'Tout sélectionner'}
+                        </button>
+                      </div>
+                      
+                      {/* Liste des équipements filtrés, groupés par bâtiment */}
+                      <div className="equipment-list-container">
+                        {(() => {
+                          // Filtrer les équipements selon la recherche
+                          const filteredEquipments = equipments.filter(eq => {
+                            const searchLower = equipmentSearch.toLowerCase()
+                            return eq.name.toLowerCase().includes(searchLower) ||
+                                   (eq.building_name && eq.building_name.toLowerCase().includes(searchLower))
+                          })
+
+                          // Grouper par bâtiment
+                          const groupedByBuilding = {}
+                          filteredEquipments.forEach(eq => {
+                            const buildingName = eq.building_name || 'Autres'
+                            if (!groupedByBuilding[buildingName]) {
+                              groupedByBuilding[buildingName] = []
+                            }
+                            groupedByBuilding[buildingName].push(eq)
+                          })
+
+                          if (filteredEquipments.length === 0) {
+                            return (
+                              <p className="no-equipments-found">
+                                {equipmentSearch ? 'Aucun équipement ne correspond à votre recherche' : 'Aucun équipement disponible'}
+                              </p>
+                            )
+                          }
+
+                          return Object.entries(groupedByBuilding).map(([buildingName, buildingEquipments]) => (
+                            <div key={buildingName} className="equipment-building-group">
+                              <div className="building-group-header">
+                                <strong>{buildingName}</strong>
+                                <span className="building-count">({buildingEquipments.length})</span>
+                              </div>
+                              <div className="equipment-checkboxes">
+                                {buildingEquipments.map(equipment => (
+                                  <label
+                                    key={equipment.id}
+                                    className={`equipment-checkbox-label ${maintenanceFormData.service_instance_ids.includes(equipment.id) ? 'selected' : ''}`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      value={equipment.id}
+                                      checked={maintenanceFormData.service_instance_ids.includes(equipment.id)}
+                                      onChange={handleMaintenanceFormChange}
+                                    />
+                                    <span className="equipment-name">{equipment.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="form-actions">
+                    <button type="button" onClick={() => setShowMaintenanceForm(false)} className="btn-cancel">
+                      Annuler
+                    </button>
+                    <button type="submit" className="btn-submit">
+                      {editingMaintenance ? 'Mettre à jour' : 'Créer'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          <div className="maintenances-table-container">
+            <table className="equipments-table">
+              <thead>
+                <tr>
+                  <th>Titre</th>
+                  <th>Description</th>
+                  <th>Date début</th>
+                  <th>Date fin</th>
+                  <th>Équipements</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {maintenances.map(maintenance => {
+                  const now = new Date()
+                  const startDate = new Date(maintenance.start_date)
+                  const endDate = new Date(maintenance.end_date)
+                  const isActive = now >= startDate && now <= endDate
+                  const isPast = now > endDate
+                  const isFuture = now < startDate
+                  
+                  return (
+                    <tr key={maintenance.id} className={isActive ? 'status-maintenance' : ''}>
+                      <td className="equipment-name">{maintenance.title}</td>
+                      <td>{maintenance.description || '-'}</td>
+                      <td>{new Date(maintenance.start_date).toLocaleString('fr-FR')}</td>
+                      <td>{new Date(maintenance.end_date).toLocaleString('fr-FR')}</td>
+                      <td>
+                        {maintenance.service_instances.map(si => si.name).join(', ')}
+                      </td>
+                      <td>
+                        <span className={`status-badge ${isActive ? 'status-maintenance' : isPast ? 'status-operational' : 'status-degraded'}`}>
+                          {isActive ? 'En cours' : isPast ? 'Terminée' : 'Planifiée'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="action-buttons">
+                          <button onClick={() => openEditMaintenanceForm(maintenance)} className="btn-icon" title="Modifier">
+                            ✏️
+                          </button>
+                          <button onClick={() => handleDeleteMaintenance(maintenance.id)} className="btn-icon" title="Supprimer">
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            {maintenances.length === 0 && (
+              <p className="no-equipments">Aucune maintenance configurée.</p>
             )}
           </div>
         </div>
