@@ -13,7 +13,7 @@ function Admin() {
   const [buildings, setBuildings] = useState([])
   const [copro, setCopro] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('copro')
+  const [activeTab, setActiveTab] = useState('tickets')
   const [maintenances, setMaintenances] = useState([])
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false)
   const [editingMaintenance, setEditingMaintenance] = useState(null)
@@ -45,7 +45,8 @@ function Admin() {
   const [incidentEditData, setIncidentEditData] = useState({
     title: '',
     message: '',
-    service_instance_id: null
+    service_instance_id: null,
+    created_at: ''
   })
   const [showCommentForm, setShowCommentForm] = useState(false)
   const [showTicketCommentForm, setShowTicketCommentForm] = useState(null) // ID du ticket pour lequel on ajoute un commentaire
@@ -57,6 +58,14 @@ function Admin() {
     title: '',
     message: ''
   })
+  const [showSimpleIncidentForm, setShowSimpleIncidentForm] = useState(false)
+  const [simpleIncidentFormData, setSimpleIncidentFormData] = useState({
+    title: '',
+    message: '',
+    service_instance_id: null,
+    created_at: ''
+  })
+  const [currentAdmin, setCurrentAdmin] = useState(null)
   const [showCoproForm, setShowCoproForm] = useState(false)
   const [editingCopro, setEditingCopro] = useState(null)
   const [coproFormData, setCoproFormData] = useState({
@@ -232,6 +241,25 @@ function Admin() {
     }
   }, [])
 
+  const loadCurrentAdmin = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/v1/auth/users/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setCurrentAdmin(data)
+      }
+    } catch (error) {
+      console.error('Erreur chargement admin actuel:', error)
+    }
+  }, [])
+
   const loadIncidents = useCallback(async () => {
     try {
       setLoading(true)
@@ -338,6 +366,7 @@ function Admin() {
       loadIncidents()
       loadAdmins()
       loadEquipments() // Charger les équipements pour la sélection dans l'édition
+      loadCurrentAdmin() // Charger les infos de l'admin connecté
     } else if (activeTab === 'users') {
       loadUsers()
       loadBuildings()
@@ -423,6 +452,61 @@ function Admin() {
         setSelectedEquipmentForIncident(null)
         setIncidentFormData({ title: '', message: '' })
         loadEquipments()
+        loadIncidents()
+      } else {
+        const error = await response.json().catch(() => ({ detail: 'Erreur lors de la création de l\'incident' }))
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de la création de l\'incident'}`)
+      }
+    } catch (error) {
+      console.error('Erreur création incident:', error)
+      toast.error('Erreur lors de la création de l\'incident')
+    }
+  }
+
+  const handleSimpleIncidentFormChange = (e) => {
+    const { name, value } = e.target
+    setSimpleIncidentFormData(prev => ({
+      ...prev,
+      [name]: name === 'service_instance_id' ? (value ? parseInt(value) : null) : value
+    }))
+  }
+
+  const handleSubmitSimpleIncident = async (e) => {
+    e.preventDefault()
+
+    try {
+      const token = localStorage.getItem('token')
+      const incidentData = {
+        title: simpleIncidentFormData.title,
+        message: simpleIncidentFormData.message,
+        status: 'investigating'
+      }
+
+      if (simpleIncidentFormData.service_instance_id) {
+        incidentData.service_instance_id = simpleIncidentFormData.service_instance_id
+      }
+
+      if (simpleIncidentFormData.created_at) {
+        incidentData.created_at = new Date(simpleIncidentFormData.created_at).toISOString()
+      }
+
+      const response = await fetch(`${API_URL}/api/v1/admin/incidents`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(incidentData)
+      })
+      if (response.ok) {
+        toast.success('Incident créé avec succès')
+        setShowSimpleIncidentForm(false)
+        setSimpleIncidentFormData({
+          title: '',
+          message: '',
+          service_instance_id: null,
+          created_at: ''
+        })
         loadIncidents()
       } else {
         const error = await response.json().catch(() => ({ detail: 'Erreur lors de la création de l\'incident' }))
@@ -647,10 +731,12 @@ function Admin() {
         const data = await response.json()
         setSelectedIncident(data)
         // Initialiser les données d'édition
+        const createdDate = data.created_at ? new Date(data.created_at).toISOString().slice(0, 16) : ''
         setIncidentEditData({
           title: data.title || '',
           message: data.message || '',
-          service_instance_id: data.service_instance_id || null
+          service_instance_id: data.service_instance_id || null,
+          created_at: createdDate
         })
         setIsEditingIncident(false)
       }
@@ -698,11 +784,18 @@ function Admin() {
   const handleSaveIncidentEdit = async () => {
     if (!selectedIncident) return
     
-    await updateIncident(selectedIncident.id, {
+    const updateData = {
       title: incidentEditData.title,
       message: incidentEditData.message,
       service_instance_id: incidentEditData.service_instance_id
-    })
+    }
+    
+    // Ajouter la date de création si elle a été modifiée
+    if (incidentEditData.created_at) {
+      updateData.created_at = new Date(incidentEditData.created_at).toISOString()
+    }
+    
+    await updateIncident(selectedIncident.id, updateData)
     setIsEditingIncident(false)
   }
 
@@ -1373,24 +1466,6 @@ function Admin() {
 
       <div className="admin-tabs">
         <button 
-          className={activeTab === 'copro' ? 'active' : ''}
-          onClick={() => setActiveTab('copro')}
-        >
-          Copropriété
-        </button>
-        <button 
-          className={activeTab === 'equipments' ? 'active' : ''}
-          onClick={() => setActiveTab('equipments')}
-        >
-          Équipements
-        </button>
-        <button 
-          className={activeTab === 'buildings' ? 'active' : ''}
-          onClick={() => setActiveTab('buildings')}
-        >
-          Bâtiments
-        </button>
-        <button 
           className={activeTab === 'tickets' ? 'active' : ''}
           onClick={() => setActiveTab('tickets')}
         >
@@ -1403,16 +1478,34 @@ function Admin() {
           Incidents ({incidents.filter(i => i.status !== 'closed').length})
         </button>
         <button 
+          className={activeTab === 'maintenances' ? 'active' : ''}
+          onClick={() => setActiveTab('maintenances')}
+        >
+          Maintenance
+        </button>
+        <button 
           className={activeTab === 'users' ? 'active' : ''}
           onClick={() => setActiveTab('users')}
         >
           Utilisateurs
         </button>
         <button 
-          className={activeTab === 'maintenances' ? 'active' : ''}
-          onClick={() => setActiveTab('maintenances')}
+          className={activeTab === 'equipments' ? 'active' : ''}
+          onClick={() => setActiveTab('equipments')}
         >
-          Maintenances
+          Équipements
+        </button>
+        <button 
+          className={activeTab === 'buildings' ? 'active' : ''}
+          onClick={() => setActiveTab('buildings')}
+        >
+          Bâtiment
+        </button>
+        <button 
+          className={activeTab === 'copro' ? 'active' : ''}
+          onClick={() => setActiveTab('copro')}
+        >
+          Copropriété
         </button>
       </div>
 
@@ -2008,7 +2101,15 @@ function Admin() {
 
       {activeTab === 'incidents' && (
         <div className="incidents-section">
-          <h2>Gestion des Incidents</h2>
+          <div className="section-header">
+            <h2>Gestion des Incidents</h2>
+            <button 
+              className="btn-create" 
+              onClick={() => setShowSimpleIncidentForm(true)}
+            >
+              + Créer un incident
+            </button>
+          </div>
           <div className="incidents-list">
             {incidents.map(incident => (
               <div 
@@ -2059,13 +2160,121 @@ function Admin() {
             {incidents.length === 0 && <p>Aucun incident</p>}
           </div>
 
+          {showSimpleIncidentForm && (
+            <div className="modal-overlay" onClick={() => setShowSimpleIncidentForm(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>Créer un incident</h3>
+                  <button className="btn-close" onClick={() => setShowSimpleIncidentForm(false)}>×</button>
+                </div>
+                <form onSubmit={handleSubmitSimpleIncident} className="incident-form">
+                  {currentAdmin && (
+                    <div className="form-group">
+                      <label>Créé par</label>
+                      <input
+                        type="text"
+                        value={`${currentAdmin.first_name || ''} ${currentAdmin.last_name || ''}`.trim() || currentAdmin.email}
+                        disabled
+                        className="form-input-disabled"
+                      />
+                      <input
+                        type="email"
+                        value={currentAdmin.email}
+                        disabled
+                        className="form-input-disabled"
+                        style={{ marginTop: '0.5rem' }}
+                      />
+                    </div>
+                  )}
+                  <div className="form-group">
+                    <label htmlFor="simple-incident-title">Titre de l'incident *</label>
+                    <input
+                      type="text"
+                      id="simple-incident-title"
+                      name="title"
+                      value={simpleIncidentFormData.title}
+                      onChange={handleSimpleIncidentFormChange}
+                      required
+                      placeholder="Ex: Panne de l'ascenseur"
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="simple-incident-message">Description *</label>
+                    <textarea
+                      id="simple-incident-message"
+                      name="message"
+                      value={simpleIncidentFormData.message}
+                      onChange={handleSimpleIncidentFormChange}
+                      required
+                      rows="5"
+                      placeholder="Décrivez le problème en détail..."
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="simple-incident-equipment">Équipement concerné (optionnel)</label>
+                    <select
+                      id="simple-incident-equipment"
+                      name="service_instance_id"
+                      value={simpleIncidentFormData.service_instance_id || ''}
+                      onChange={handleSimpleIncidentFormChange}
+                      className="form-input"
+                    >
+                      <option value="">Aucun équipement</option>
+                      {equipments.map(equipment => (
+                        <option key={equipment.id} value={equipment.id}>
+                          {equipment.name} {equipment.building_name ? `(${equipment.building_name})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="simple-incident-date">Date de début de l'incident (optionnel)</label>
+                    <input
+                      type="datetime-local"
+                      id="simple-incident-date"
+                      name="created_at"
+                      value={simpleIncidentFormData.created_at}
+                      onChange={handleSimpleIncidentFormChange}
+                      className="form-input"
+                    />
+                    <small style={{ color: '#666', fontSize: '0.85rem', display: 'block', marginTop: '0.25rem' }}>
+                      Laisser vide pour utiliser la date actuelle
+                    </small>
+                  </div>
+                  <div className="form-actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSimpleIncidentForm(false)
+                        setSimpleIncidentFormData({
+                          title: '',
+                          message: '',
+                          service_instance_id: null,
+                          created_at: ''
+                        })
+                      }}
+                      className="btn-cancel"
+                    >
+                      Annuler
+                    </button>
+                    <button type="submit" className="btn-submit">
+                      Créer l'incident
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {selectedIncident && (
             <div className="modal-overlay" onClick={() => setSelectedIncident(null)}>
               <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                   <h3>Détails de l'incident: {selectedIncident.title}</h3>
                   <div>
-                    {!isEditingIncident ? (
+                    {!isEditingIncident && (
                       <button 
                         className="btn-edit" 
                         onClick={() => setIsEditingIncident(true)}
@@ -2073,31 +2282,6 @@ function Admin() {
                       >
                         ✏️ Modifier
                       </button>
-                    ) : (
-                      <>
-                        <button 
-                          className="btn-cancel" 
-                          onClick={() => {
-                            setIsEditingIncident(false)
-                            // Restaurer les valeurs originales
-                            setIncidentEditData({
-                              title: selectedIncident.title || '',
-                              message: selectedIncident.message || '',
-                              service_instance_id: selectedIncident.service_instance_id || null
-                            })
-                          }}
-                          style={{ marginRight: '0.5rem' }}
-                        >
-                          Annuler
-                        </button>
-                        <button 
-                          className="btn-submit" 
-                          onClick={handleSaveIncidentEdit}
-                          style={{ marginRight: '0.5rem' }}
-                        >
-                          Enregistrer
-                        </button>
-                      </>
                     )}
                     <button className="btn-close" onClick={() => setSelectedIncident(null)}>×</button>
                   </div>
@@ -2156,6 +2340,45 @@ function Admin() {
                               </option>
                             ))}
                           </select>
+                        </div>
+                        <div className="form-group">
+                          <label><strong>Date de début de l'incident:</strong></label>
+                          <input
+                            type="datetime-local"
+                            name="created_at"
+                            value={incidentEditData.created_at}
+                            onChange={handleIncidentEditChange}
+                            className="form-input"
+                          />
+                          <small style={{ color: '#666', fontSize: '0.85rem', display: 'block', marginTop: '0.25rem' }}>
+                            Date correspondant au début réel de l'incident
+                          </small>
+                        </div>
+                        <div className="form-actions" style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                          <button 
+                            type="button"
+                            className="btn-cancel" 
+                            onClick={() => {
+                              setIsEditingIncident(false)
+                              // Restaurer les valeurs originales
+                              const createdDate = selectedIncident.created_at ? new Date(selectedIncident.created_at).toISOString().slice(0, 16) : ''
+                              setIncidentEditData({
+                                title: selectedIncident.title || '',
+                                message: selectedIncident.message || '',
+                                service_instance_id: selectedIncident.service_instance_id || null,
+                                created_at: createdDate
+                              })
+                            }}
+                          >
+                            Annuler
+                          </button>
+                          <button 
+                            type="button"
+                            className="btn-submit" 
+                            onClick={handleSaveIncidentEdit}
+                          >
+                            Enregistrer
+                          </button>
                         </div>
                       </>
                     ) : (

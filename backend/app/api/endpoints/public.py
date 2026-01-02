@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import func as sql_func, and_
 from app.db import get_db
 from app.models.ticket import Ticket, TicketStatus, TicketType
@@ -218,9 +218,9 @@ async def get_public_general_statistics(
     if year is None:
         year = datetime.utcnow().year
     
-    # Dates de début et fin de l'année (1er janvier 00:00:00 au 31 décembre 23:59:59)
-    start_date = datetime(year, 1, 1, 0, 0, 0)
-    end_date = datetime(year, 12, 31, 23, 59, 59)
+    # Dates de début et fin de l'année (1er janvier 00:00:00 au 31 décembre 23:59:59) - avec timezone UTC
+    start_date = datetime(year, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    end_date = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
     
     # Nombre d'incidents par jour sur l'année sélectionnée
     incidents_by_day_query = db.query(
@@ -347,16 +347,21 @@ async def get_public_general_statistics(
         for incident in equipment_incidents:
             if incident.resolved_at and incident.created_at:
                 # Incident résolu : temps de résolution (limité à la période de l'année)
-                incident_start = max(incident.created_at, start_date)
-                incident_end = min(incident.resolved_at, end_date)
+                # S'assurer que les dates sont timezone-aware pour la comparaison
+                incident_created = incident.created_at if incident.created_at.tzinfo else incident.created_at.replace(tzinfo=timezone.utc)
+                incident_resolved = incident.resolved_at if incident.resolved_at.tzinfo else incident.resolved_at.replace(tzinfo=timezone.utc)
+                incident_start = max(incident_created, start_date)
+                incident_end = min(incident_resolved, end_date)
                 resolution_time = (incident_end - incident_start).total_seconds() / 3600
                 downtime_hours += resolution_time
                 total_resolution_time += resolution_time
                 resolved_count += 1
             elif incident.created_at:
                 # Incident non résolu : temps depuis la création jusqu'à la fin de l'année (ou maintenant si année en cours)
-                incident_start = max(incident.created_at, start_date)
-                incident_end = min(datetime.utcnow(), end_date)
+                incident_created = incident.created_at if incident.created_at.tzinfo else incident.created_at.replace(tzinfo=timezone.utc)
+                now_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
+                incident_start = max(incident_created, start_date)
+                incident_end = min(now_utc, end_date)
                 downtime_hours += (incident_end - incident_start).total_seconds() / 3600
         
         # Calculer la disponibilité
@@ -416,9 +421,9 @@ async def get_public_statistics_by_building(
     if year is None:
         year = datetime.utcnow().year
     
-    # Dates de début et fin de l'année (1er janvier 00:00:00 au 31 décembre 23:59:59)
-    start_date = datetime(year, 1, 1, 0, 0, 0)
-    end_date = datetime(year, 12, 31, 23, 59, 59)
+    # Dates de début et fin de l'année (1er janvier 00:00:00 au 31 décembre 23:59:59) - avec timezone UTC
+    start_date = datetime(year, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    end_date = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
     
     # Récupérer les IDs des équipements du bâtiment
     equipment_ids = [si.id for si in db.query(ServiceInstance.id).filter(
@@ -567,16 +572,21 @@ async def get_public_statistics_by_building(
         for incident in equipment_incidents:
             if incident.resolved_at and incident.created_at:
                 # Incident résolu : temps de résolution (limité à la période de l'année)
-                incident_start = max(incident.created_at, start_date)
-                incident_end = min(incident.resolved_at, end_date)
+                # S'assurer que les dates sont timezone-aware pour la comparaison
+                incident_created = incident.created_at if incident.created_at.tzinfo else incident.created_at.replace(tzinfo=timezone.utc)
+                incident_resolved = incident.resolved_at if incident.resolved_at.tzinfo else incident.resolved_at.replace(tzinfo=timezone.utc)
+                incident_start = max(incident_created, start_date)
+                incident_end = min(incident_resolved, end_date)
                 resolution_time = (incident_end - incident_start).total_seconds() / 3600
                 downtime_hours += resolution_time
                 total_resolution_time += resolution_time
                 resolved_count += 1
             elif incident.created_at:
                 # Incident non résolu : temps depuis la création jusqu'à la fin de l'année (ou maintenant si année en cours)
-                incident_start = max(incident.created_at, start_date)
-                incident_end = min(datetime.utcnow(), end_date)
+                incident_created = incident.created_at if incident.created_at.tzinfo else incident.created_at.replace(tzinfo=timezone.utc)
+                now_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
+                incident_start = max(incident_created, start_date)
+                incident_end = min(now_utc, end_date)
                 downtime_hours += (incident_end - incident_start).total_seconds() / 3600
         
         # Calculer la disponibilité

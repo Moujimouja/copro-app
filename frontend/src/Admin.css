@@ -685,12 +685,12 @@
 }
 
 .btn-cancel {
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 1rem;
   background-color: #f3f4f6;
   color: #374151;
   border: none;
   border-radius: 4px;
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -701,12 +701,12 @@
 }
 
 .btn-submit {
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 1rem;
   background-color: #2563eb;
   color: white;
   border: none;
   border-radius: 4px;
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -714,6 +714,25 @@
 
 .btn-submit:hover {
   background-color: #1d4ed8;
+}
+
+/* Amélioration du formulaire d'édition d'incident */
+.incident-details .form-group {
+  margin-bottom: 1.25rem;
+}
+
+.incident-details .form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #374151;
+  font-weight: 500;
+}
+
+.incident-details .form-group small {
+  color: #6b7280;
+  font-size: 0.85rem;
+  display: block;
+  margin-top: 0.25rem;
 }
 
 @media (max-width: 768px) {

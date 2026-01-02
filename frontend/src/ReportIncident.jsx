@@ -7,7 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 function ReportIncident() {
   const [formData, setFormData] = useState({
     type: 'incident', // 'incident' ou 'request'
-    service_instance_id: null,
+    service_instance_ids: [], // Array d'IDs d'équipements
     reporter_name: '',
     reporter_email: '',
     reporter_phone: '',
@@ -16,6 +16,7 @@ function ReportIncident() {
     location: ''
   })
   const [equipments, setEquipments] = useState([])
+  const [equipmentSearch, setEquipmentSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState(null)
@@ -47,8 +48,8 @@ function ReportIncident() {
     }
     
     // Validation de l'équipement (obligatoire seulement pour les incidents)
-    if (formData.type === 'incident' && !formData.service_instance_id) {
-      errors.service_instance_id = 'Veuillez sélectionner un équipement concerné'
+    if (formData.type === 'incident' && (!formData.service_instance_ids || formData.service_instance_ids.length === 0)) {
+      errors.service_instance_ids = 'Veuillez sélectionner au moins un équipement concerné'
     }
     
     // Validation du titre
@@ -121,8 +122,11 @@ function ReportIncident() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          ...formData,
-          service_instance_id: formData.service_instance_id || null,
+          type: formData.type,
+          // Pour l'instant, on prend le premier équipement sélectionné (le backend n'accepte qu'un seul équipement)
+          service_instance_id: formData.service_instance_ids && formData.service_instance_ids.length > 0 
+            ? formData.service_instance_ids[0] 
+            : null,
           title: formData.title.trim(),
           description: formData.description.trim(),
           location: formData.location ? formData.location.trim() : null,
@@ -172,17 +176,15 @@ function ReportIncident() {
     const { name, value } = e.target
     const newFormData = {
       ...formData,
-      [name]: name === 'service_instance_id' 
-        ? (value ? Number(value) : null) 
-        : value
+      [name]: value
     }
     setFormData(newFormData)
     
     // Si le type change, effacer l'erreur de l'équipement si on passe à "demande"
-    if (name === 'type' && value === 'request' && fieldErrors.service_instance_id) {
+    if (name === 'type' && value === 'request' && fieldErrors.service_instance_ids) {
       setFieldErrors(prev => {
         const newErrors = { ...prev }
-        delete newErrors.service_instance_id
+        delete newErrors.service_instance_ids
         return newErrors
       })
     }
@@ -194,6 +196,50 @@ function ReportIncident() {
         delete newErrors[name]
         return newErrors
       })
+    }
+  }
+
+  const toggleEquipment = (equipmentId) => {
+    setFormData(prev => {
+      const currentIds = prev.service_instance_ids || []
+      const newIds = currentIds.includes(equipmentId)
+        ? currentIds.filter(id => id !== equipmentId)
+        : [...currentIds, equipmentId]
+      return {
+        ...prev,
+        service_instance_ids: newIds
+      }
+    })
+    
+    // Effacer l'erreur si un équipement est sélectionné
+    if (fieldErrors.service_instance_ids) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors.service_instance_ids
+        return newErrors
+      })
+    }
+  }
+
+  const removeEquipment = (equipmentId) => {
+    setFormData(prev => ({
+      ...prev,
+      service_instance_ids: (prev.service_instance_ids || []).filter(id => id !== equipmentId)
+    }))
+  }
+
+  const toggleSelectAllEquipments = () => {
+    if (equipments.length === 0) return
+    if (formData.service_instance_ids.length === equipments.length) {
+      setFormData(prev => ({
+        ...prev,
+        service_instance_ids: []
+      }))
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        service_instance_ids: equipments.map(eq => eq.id)
+      }))
     }
   }
 
@@ -210,7 +256,7 @@ function ReportIncident() {
             setSubmitted(false)
             setFormData({
               type: 'incident',
-              service_instance_id: null,
+              service_instance_ids: [],
               reporter_name: '',
               reporter_email: '',
               reporter_phone: '',
@@ -218,6 +264,7 @@ function ReportIncident() {
               description: '',
               location: ''
             })
+            setEquipmentSearch('')
           }}>
             Faire une autre demande
           </button>
@@ -270,26 +317,123 @@ function ReportIncident() {
         </div>
 
         <div className="form-group">
-          <label htmlFor="service_instance_id">
-            Équipement concerné {formData.type === 'incident' ? '*' : ''}
+          <label>
+            Équipements concernés {formData.type === 'incident' ? '*' : ''}
+            {formData.service_instance_ids && formData.service_instance_ids.length > 0 && (
+              <span className="selected-count">
+                ({formData.service_instance_ids.length} sélectionné{formData.service_instance_ids.length > 1 ? 's' : ''})
+              </span>
+            )}
           </label>
-          <select
-            id="service_instance_id"
-            name="service_instance_id"
-            value={formData.service_instance_id || ''}
-            onChange={handleChange}
-            required={formData.type === 'incident'}
-            className={fieldErrors.service_instance_id ? 'error' : ''}
-          >
-            <option value="">Sélectionner un équipement {formData.type === 'request' ? '(optionnel)' : ''}</option>
-            {equipments.map(equipment => (
-              <option key={equipment.id} value={equipment.id}>
-                {equipment.name} - {equipment.building} ({equipment.status})
-              </option>
-            ))}
-          </select>
-          {fieldErrors.service_instance_id && (
-            <span className="field-error">{fieldErrors.service_instance_id}</span>
+          
+          {/* Équipements sélectionnés (tags) */}
+          {formData.service_instance_ids && formData.service_instance_ids.length > 0 && (
+            <div className="selected-equipments-tags">
+              {formData.service_instance_ids.map(equipmentId => {
+                const equipment = equipments.find(eq => eq.id === equipmentId)
+                if (!equipment) return null
+                return (
+                  <span key={equipmentId} className="equipment-tag">
+                    {equipment.name}
+                    {equipment.building && <span className="tag-building"> ({equipment.building})</span>}
+                    <button
+                      type="button"
+                      onClick={() => removeEquipment(equipmentId)}
+                      className="tag-remove"
+                      title="Retirer"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Multiselect d'équipements */}
+          {formData.type === 'incident' && (
+            <div className="equipment-multiselect">
+              <div className="multiselect-header">
+                <input
+                  type="text"
+                  placeholder="Rechercher un équipement..."
+                  value={equipmentSearch}
+                  onChange={(e) => setEquipmentSearch(e.target.value)}
+                  className="equipment-search-input"
+                />
+                <button
+                  type="button"
+                  onClick={toggleSelectAllEquipments}
+                  className="btn-select-all"
+                >
+                  {formData.service_instance_ids.length === equipments.length
+                    ? 'Tout désélectionner'
+                    : 'Tout sélectionner'}
+                </button>
+              </div>
+              
+              {/* Liste des équipements filtrés, groupés par bâtiment */}
+              <div className="equipment-list-container">
+                {(() => {
+                  // Filtrer les équipements selon la recherche
+                  const filteredEquipments = equipments.filter(eq => {
+                    const searchLower = equipmentSearch.toLowerCase()
+                    return eq.name.toLowerCase().includes(searchLower) ||
+                           (eq.building && eq.building.toLowerCase().includes(searchLower))
+                  })
+
+                  // Grouper par bâtiment
+                  const groupedByBuilding = {}
+                  filteredEquipments.forEach(eq => {
+                    const buildingName = eq.building || 'Autres'
+                    if (!groupedByBuilding[buildingName]) {
+                      groupedByBuilding[buildingName] = []
+                    }
+                    groupedByBuilding[buildingName].push(eq)
+                  })
+
+                  if (Object.keys(groupedByBuilding).length === 0) {
+                    return (
+                      <div className="no-equipments-found">
+                        Aucun équipement trouvé
+                      </div>
+                    )
+                  }
+
+                  return Object.entries(groupedByBuilding).map(([buildingName, buildingEquipments]) => (
+                    <div key={buildingName} className="equipment-building-group">
+                      <div className="building-header">{buildingName}</div>
+                      <div className="equipment-list">
+                        {buildingEquipments.map(equipment => (
+                          <label
+                            key={equipment.id}
+                            className={`equipment-checkbox-label ${formData.service_instance_ids.includes(equipment.id) ? 'selected' : ''}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={formData.service_instance_ids.includes(equipment.id)}
+                              onChange={() => toggleEquipment(equipment.id)}
+                            />
+                            <span className="equipment-name">{equipment.name}</span>
+                            <span className="equipment-status">({equipment.status})</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                })()}
+              </div>
+            </div>
+          )}
+          
+          {formData.type === 'request' && (
+            <p className="form-help-text" style={{ color: '#666', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+              Les équipements ne sont pas obligatoires pour une demande.
+            </p>
+          )}
+          
+          {fieldErrors.service_instance_ids && (
+            <span className="field-error">{fieldErrors.service_instance_ids}</span>
           )}
         </div>
 

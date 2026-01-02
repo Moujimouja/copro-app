@@ -74,6 +74,7 @@ class IncidentCreate(BaseModel):
     status: str = "investigating"
     is_scheduled: bool = False
     scheduled_for: Optional[datetime] = None
+    created_at: Optional[datetime] = None  # Date de début réel de l'incident
 
 
 class IncidentUpdateCreate(BaseModel):
@@ -106,7 +107,8 @@ class IncidentStatusUpdate(BaseModel):
 class IncidentUpdate(BaseModel):
     title: Optional[str] = None
     message: Optional[str] = None
-    service_instance_id: Optional[int] = None  # investigating, in_progress, resolved, closed
+    service_instance_id: Optional[int] = None
+    created_at: Optional[datetime] = None  # Date de début réel de l'incident
 
 
 class IncidentCommentCreate(BaseModel):
@@ -653,7 +655,8 @@ async def create_incident(
         message=incident_data.message,
         status=IncidentStatus(incident_data.status),
         is_scheduled=incident_data.is_scheduled,
-        scheduled_for=incident_data.scheduled_for
+        scheduled_for=incident_data.scheduled_for,
+        created_at=incident_data.created_at if incident_data.created_at else datetime.utcnow()
     )
     
     db.add(incident)
@@ -862,6 +865,10 @@ async def update_incident(
         if not service_instance:
             raise HTTPException(status_code=404, detail="Équipement non trouvé")
         incident.service_instance_id = incident_update.service_instance_id
+    
+    # Mettre à jour la date de création si fournie
+    if incident_update.created_at is not None:
+        incident.created_at = incident_update.created_at
     
     incident.updated_at = datetime.utcnow()
     db.commit()
