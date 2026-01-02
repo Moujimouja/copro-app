@@ -178,16 +178,21 @@ function ReportIncident() {
       ...formData,
       [name]: value
     }
-    setFormData(newFormData)
     
-    // Si le type change, effacer l'erreur de l'équipement si on passe à "demande"
-    if (name === 'type' && value === 'request' && fieldErrors.service_instance_ids) {
-      setFieldErrors(prev => {
-        const newErrors = { ...prev }
-        delete newErrors.service_instance_ids
-        return newErrors
-      })
+    // Si le type change vers "Demande", effacer les équipements sélectionnés
+    if (name === 'type' && value === 'request') {
+      newFormData.service_instance_ids = []
+      setEquipmentSearch('')
+      if (fieldErrors.service_instance_ids) {
+        setFieldErrors(prev => {
+          const newErrors = { ...prev }
+          delete newErrors.service_instance_ids
+          return newErrors
+        })
+      }
     }
+    
+    setFormData(newFormData)
     
     // Effacer l'erreur du champ quand l'utilisateur commence à taper
     if (fieldErrors[name]) {
@@ -316,42 +321,42 @@ function ReportIncident() {
           )}
         </div>
 
-        <div className="form-group">
-          <label>
-            Équipements concernés {formData.type === 'incident' ? '*' : ''}
+        {formData.type === 'incident' && (
+          <div className="form-group">
+            <label>
+              Équipements concernés *
+              {formData.service_instance_ids && formData.service_instance_ids.length > 0 && (
+                <span className="selected-count">
+                  ({formData.service_instance_ids.length} sélectionné{formData.service_instance_ids.length > 1 ? 's' : ''})
+                </span>
+              )}
+            </label>
+            
+            {/* Équipements sélectionnés (tags) */}
             {formData.service_instance_ids && formData.service_instance_ids.length > 0 && (
-              <span className="selected-count">
-                ({formData.service_instance_ids.length} sélectionné{formData.service_instance_ids.length > 1 ? 's' : ''})
-              </span>
+              <div className="selected-equipments-tags">
+                {formData.service_instance_ids.map(equipmentId => {
+                  const equipment = equipments.find(eq => eq.id === equipmentId)
+                  if (!equipment) return null
+                  return (
+                    <span key={equipmentId} className="equipment-tag">
+                      {equipment.name}
+                      {equipment.building && <span className="tag-building"> ({equipment.building})</span>}
+                      <button
+                        type="button"
+                        onClick={() => removeEquipment(equipmentId)}
+                        className="tag-remove"
+                        title="Retirer"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  )
+                })}
+              </div>
             )}
-          </label>
-          
-          {/* Équipements sélectionnés (tags) */}
-          {formData.service_instance_ids && formData.service_instance_ids.length > 0 && (
-            <div className="selected-equipments-tags">
-              {formData.service_instance_ids.map(equipmentId => {
-                const equipment = equipments.find(eq => eq.id === equipmentId)
-                if (!equipment) return null
-                return (
-                  <span key={equipmentId} className="equipment-tag">
-                    {equipment.name}
-                    {equipment.building && <span className="tag-building"> ({equipment.building})</span>}
-                    <button
-                      type="button"
-                      onClick={() => removeEquipment(equipmentId)}
-                      className="tag-remove"
-                      title="Retirer"
-                    >
-                      ×
-                    </button>
-                  </span>
-                )
-              })}
-            </div>
-          )}
 
-          {/* Multiselect d'équipements */}
-          {formData.type === 'incident' && (
+            {/* Multiselect d'équipements */}
             <div className="equipment-multiselect">
               <div className="multiselect-header">
                 <input
@@ -424,18 +429,12 @@ function ReportIncident() {
                 })()}
               </div>
             </div>
-          )}
-          
-          {formData.type === 'request' && (
-            <p className="form-help-text" style={{ color: '#666', fontSize: '0.9rem', marginTop: '0.5rem' }}>
-              Les équipements ne sont pas obligatoires pour une demande.
-            </p>
-          )}
-          
-          {fieldErrors.service_instance_ids && (
-            <span className="field-error">{fieldErrors.service_instance_ids}</span>
-          )}
-        </div>
+            
+            {fieldErrors.service_instance_ids && (
+              <span className="field-error">{fieldErrors.service_instance_ids}</span>
+            )}
+          </div>
+        )}
 
         <div className="form-group">
           <label htmlFor="title">Titre {formData.type === 'incident' ? "de l'incident" : "de la demande"} *</label>
