@@ -25,10 +25,24 @@ function Status() {
   // Initialiser les sections expandées quand les données sont chargées
   useEffect(() => {
     if (statusData && statusData.services) {
-      const buildings = new Set(statusData.services.map(s => s.building_name || 'Commun'))
+      // Grouper les services par bâtiment
+      const groupedByBuilding = {}
+      statusData.services.forEach(service => {
+        const buildingKey = service.building_name || 'Commun'
+        if (!groupedByBuilding[buildingKey]) {
+          groupedByBuilding[buildingKey] = []
+        }
+        groupedByBuilding[buildingKey].push(service)
+      })
+      
+      // Initialiser l'état d'expansion : collapsed si tous les services sont opérationnels
       const initialExpanded = {}
-      buildings.forEach(building => {
-        initialExpanded[building] = true // Toutes expandées par défaut
+      Object.keys(groupedByBuilding).forEach(building => {
+        const services = groupedByBuilding[building]
+        // Vérifier si tous les services sont opérationnels
+        const allOperational = services.every(s => s.status === 'operational')
+        // Si tous sont opérationnels, le bâtiment est collapsed (false), sinon expanded (true)
+        initialExpanded[building] = !allOperational
       })
       setExpandedBuildings(initialExpanded)
     }
