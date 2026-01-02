@@ -1,0 +1,326 @@
+.statistics-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.statistics-header {
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 1rem;
+}
+
+.statistics-header h1 {
+  font-size: 2rem;
+  color: #1f2937;
+  margin-bottom: 1rem;
+}
+
+.year-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.year-selector label {
+  font-weight: 500;
+  color: #374151;
+}
+
+.year-select {
+  padding: 0.5rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 1rem;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.year-select:hover {
+  border-color: #3498db;
+}
+
+.year-select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.statistics-tabs {
+  display: flex;
+  gap: 1rem;
+}
+
+.statistics-tabs button {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  color: #6b7280;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.statistics-tabs button:hover {
+  border-color: #3498db;
+  color: #3498db;
+}
+
+.statistics-tabs button.active {
+  background: #3498db;
+  border-color: #3498db;
+  color: white;
+}
+
+.building-selector {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.building-selector label {
+  font-weight: 500;
+  color: #374151;
+}
+
+.building-select {
+  flex: 1;
+  max-width: 300px;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.statistics-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.statistics-content h2 {
+  font-size: 1.75rem;
+  color: #1f2937;
+  margin-bottom: 1rem;
+}
+
+.statistics-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.statistics-section h3 {
+  font-size: 1.25rem;
+  color: #374151;
+  margin-bottom: 1.5rem;
+}
+
+.incidents-table-container {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.incidents-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.incidents-table thead {
+  background: #f9fafb;
+}
+
+.incidents-table th {
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.incidents-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #6b7280;
+}
+
+.incidents-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-badge.status-investigating {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.status-badge.status-in_progress {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.status-resolved {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.status-closed {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.no-data {
+  text-align: center;
+  padding: 2rem;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.equipment-availability-table-container {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.equipment-availability-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.equipment-availability-table thead {
+  background: #f9fafb;
+}
+
+.equipment-availability-table th {
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.equipment-availability-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #6b7280;
+}
+
+.equipment-availability-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.availability-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.availability-percent {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.availability-percent.high {
+  color: #10b981; /* Vert pour disponibilité >= 95% */
+}
+
+.availability-percent.medium {
+  color: #f59e0b; /* Orange pour disponibilité >= 80% */
+}
+
+.availability-percent.low {
+  color: #ef4444; /* Rouge pour disponibilité < 80% */
+}
+
+.availability-bar {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.availability-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #f59e0b 80%, #ef4444 100%);
+  transition: width 0.3s ease;
+  border-radius: 4px;
+}
+
+.statistics-placeholder {
+  text-align: center;
+  padding: 4rem;
+  color: #9ca3af;
+  font-size: 1.125rem;
+}
+
+.statistics-loading {
+  text-align: center;
+  padding: 4rem;
+  font-size: 1.25rem;
+  color: #6b7280;
+}
+
+@media (max-width: 768px) {
+  .statistics-page {
+    padding: 1rem;
+  }
+
+  .statistics-section {
+    padding: 1rem;
+  }
+
+  .statistics-tabs {
+    flex-direction: column;
+  }
+
+  .building-selector {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .building-select {
+    max-width: 100%;
+  }
+
+  .incidents-table {
+    font-size: 0.8rem;
+  }
+
+  .incidents-table th,
+  .incidents-table td {
+    padding: 0.5rem;
+  }
+
+  .equipment-availability-table {
+    font-size: 0.8rem;
+  }
+
+  .equipment-availability-table th,
+  .equipment-availability-table td {
+    padding: 0.5rem;
+  }
+}
+

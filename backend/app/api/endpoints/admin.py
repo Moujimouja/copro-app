@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
-from datetime import datetime
+from datetime import datetime, timedelta
+from sqlalchemy import func as sql_func, and_
 from app.db import get_db
 from app.models.copro import Copro, Building, ServiceInstance
 from app.models.status import Incident, IncidentUpdate as IncidentUpdateModel, IncidentComment, IncidentStatus
@@ -1717,3 +1718,258 @@ async def delete_maintenance(
     db.delete(maintenance)
     db.commit()
     return None
+
+
+# ============ Statistiques ============
+
+@router.get("/statistics/general", response_model=dict)
+async def get_general_statistics(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Obtenir les statistiques générales des incidents (admin uniquement)"""
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        return {
+            "incidents_by_day": [],
+            "all_incidents": [],
+            "resolution_time_by_equipment": []
+        }
+    
+    # Date de début (6 mois en arrière)
+    six_months_ago = datetime.utcnow() - timedelta(days=180)
+    
+    # Nombre d'incidents par jour sur les 6 derniers mois
+    incidents_by_day_query = db.query(
+        sql_func.date(Incident.created_at).label('date'),
+        sql_func.count(Incident.id).label('count')
+    ).filter(
+        and_(
+            Incident.copro_id == copro.id,
+            Incident.created_at >= six_months_ago
+        )
+    ).group_by(
+        sql_func.date(Incident.created_at)
+    ).order_by(
+        sql_func.date(Incident.created_at)
+    ).all()
+    
+    incidents_by_day = [
+        {
+            "date": row.date.isoformat() if row.date else None,
+            "count": row.count
+        }
+        for row in incidents_by_day_query
+    ]
+    
+    # Tous les incidents
+    all_incidents_query = db.query(Incident).filter(
+        Incident.copro_id == copro.id
+    ).order_by(Incident.created_at.desc()).all()
+    
+    all_incidents = []
+    for incident in all_incidents_query:
+        db.refresh(incident, ['service_instance'])
+        resolution_time = None
+        if incident.resolved_at and incident.created_at:
+            delta = incident.resolved_at - incident.created_at
+            resolution_time = delta.total_seconds() / 3600  # En heures
+        
+        all_incidents.append({
+            "id": incident.id,
+            "title": incident.title,
+            "message": incident.message,
+            "status": incident.status.value,
+            "service_instance": incident.service_instance.name if incident.service_instance else None,
+            "service_instance_id": incident.service_instance_id,
+            "created_at": incident.created_at.isoformat() if incident.created_at else None,
+            "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
+            "resolution_time_hours": resolution_time
+        })
+    
+    # Temps de résolution par équipement (moyen, min, max)
+    resolution_stats_query = db.query(
+        ServiceInstance.id,
+        ServiceInstance.name,
+        sql_func.avg(
+            sql_func.extract('epoch', Incident.resolved_at - Incident.created_at) / 3600
+        ).label('avg_hours'),
+        sql_func.min(
+            sql_func.extract('epoch', Incident.resolved_at - Incident.created_at) / 3600
+        ).label('min_hours'),
+        sql_func.max(
+            sql_func.extract('epoch', Incident.resolved_at - Incident.created_at) / 3600
+        ).label('max_hours'),
+        sql_func.count(Incident.id).label('incident_count')
+    ).join(
+        Incident, ServiceInstance.id == Incident.service_instance_id
+    ).filter(
+        and_(
+            ServiceInstance.copro_id == copro.id,
+            Incident.copro_id == copro.id,
+            Incident.resolved_at.isnot(None)
+        )
+    ).group_by(
+        ServiceInstance.id,
+        ServiceInstance.name
+    ).all()
+    
+    resolution_time_by_equipment = [
+        {
+            "equipment_id": row.id,
+            "equipment_name": row.name,
+            "avg_hours": float(row.avg_hours) if row.avg_hours else None,
+            "min_hours": float(row.min_hours) if row.min_hours else None,
+            "max_hours": float(row.max_hours) if row.max_hours else None,
+            "incident_count": row.incident_count
+        }
+        for row in resolution_stats_query
+    ]
+    
+    return {
+        "incidents_by_day": incidents_by_day,
+        "all_incidents": all_incidents,
+        "resolution_time_by_equipment": resolution_time_by_equipment
+    }
+
+
+@router.get("/statistics/by-building/{building_id}", response_model=dict)
+async def get_statistics_by_building(
+    building_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Obtenir les statistiques des incidents par bâtiment (admin uniquement)"""
+    copro = db.query(Copro).filter(Copro.is_active == True).first()
+    if not copro:
+        return {
+            "incidents_by_day": [],
+            "all_incidents": [],
+            "resolution_time_by_equipment": []
+        }
+    
+    # Vérifier que le bâtiment existe et appartient à la copropriété
+    building = db.query(Building).filter(
+        Building.id == building_id,
+        Building.copro_id == copro.id
+    ).first()
+    if not building:
+        raise HTTPException(status_code=404, detail="Bâtiment non trouvé")
+    
+    # Date de début (6 mois en arrière)
+    six_months_ago = datetime.utcnow() - timedelta(days=180)
+    
+    # Récupérer les IDs des équipements du bâtiment
+    equipment_ids = [si.id for si in db.query(ServiceInstance.id).filter(
+        ServiceInstance.building_id == building_id,
+        ServiceInstance.copro_id == copro.id
+    ).all()]
+    
+    if not equipment_ids:
+        return {
+            "building_id": building_id,
+            "building_name": building.name,
+            "incidents_by_day": [],
+            "all_incidents": [],
+            "resolution_time_by_equipment": []
+        }
+    
+    # Nombre d'incidents par jour sur les 6 derniers mois pour ce bâtiment
+    incidents_by_day_query = db.query(
+        sql_func.date(Incident.created_at).label('date'),
+        sql_func.count(Incident.id).label('count')
+    ).filter(
+        and_(
+            Incident.copro_id == copro.id,
+            Incident.created_at >= six_months_ago,
+            Incident.service_instance_id.in_(equipment_ids)
+        )
+    ).group_by(
+        sql_func.date(Incident.created_at)
+    ).order_by(
+        sql_func.date(Incident.created_at)
+    ).all()
+    
+    incidents_by_day = [
+        {
+            "date": row.date.isoformat() if row.date else None,
+            "count": row.count
+        }
+        for row in incidents_by_day_query
+    ]
+    
+    # Tous les incidents pour ce bâtiment
+    all_incidents_query = db.query(Incident).filter(
+        and_(
+            Incident.copro_id == copro.id,
+            Incident.service_instance_id.in_(equipment_ids)
+        )
+    ).order_by(Incident.created_at.desc()).all()
+    
+    all_incidents = []
+    for incident in all_incidents_query:
+        db.refresh(incident, ['service_instance'])
+        resolution_time = None
+        if incident.resolved_at and incident.created_at:
+            delta = incident.resolved_at - incident.created_at
+            resolution_time = delta.total_seconds() / 3600  # En heures
+        
+        all_incidents.append({
+            "id": incident.id,
+            "title": incident.title,
+            "message": incident.message,
+            "status": incident.status.value,
+            "service_instance": incident.service_instance.name if incident.service_instance else None,
+            "service_instance_id": incident.service_instance_id,
+            "created_at": incident.created_at.isoformat() if incident.created_at else None,
+            "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
+            "resolution_time_hours": resolution_time
+        })
+    
+    # Temps de résolution par équipement (moyen, min, max) pour ce bâtiment
+    resolution_stats_query = db.query(
+        ServiceInstance.id,
+        ServiceInstance.name,
+        sql_func.avg(
+            sql_func.extract('epoch', Incident.resolved_at - Incident.created_at) / 3600
+        ).label('avg_hours'),
+        sql_func.min(
+            sql_func.extract('epoch', Incident.resolved_at - Incident.created_at) / 3600
+        ).label('min_hours'),
+        sql_func.max(
+            sql_func.extract('epoch', Incident.resolved_at - Incident.created_at) / 3600
+        ).label('max_hours'),
+        sql_func.count(Incident.id).label('incident_count')
+    ).join(
+        Incident, ServiceInstance.id == Incident.service_instance_id
+    ).filter(
+        and_(
+            ServiceInstance.copro_id == copro.id,
+            ServiceInstance.building_id == building_id,
+            Incident.copro_id == copro.id,
+            Incident.resolved_at.isnot(None)
+        )
+    ).group_by(
+        ServiceInstance.id,
+        ServiceInstance.name
+    ).all()
+    
+    resolution_time_by_equipment = [
+        {
+            "equipment_id": row.id,
+            "equipment_name": row.name,
+            "avg_hours": float(row.avg_hours) if row.avg_hours else None,
+            "min_hours": float(row.min_hours) if row.min_hours else None,
+            "max_hours": float(row.max_hours) if row.max_hours else None,
+            "incident_count": row.incident_count
+        }
+        for row in resolution_stats_query
+    ]
+    
+    return {
+        "building_id": building_id,
+        "building_name": building.name,
+        "incidents_by_day": incidents_by_day,
+        "all_incidents": all_incidents,
+        "resolution_time_by_equipment": resolution_time_by_equipment
+    }

@@ -5,6 +5,7 @@ import Status from './Status'
 import Admin from './Admin'
 import ReportIncident from './ReportIncident'
 import Expenses from './Expenses'
+import Statistics from './Statistics'
 import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -417,6 +418,7 @@ function AppContent() {
             <Link to="/status" onClick={closeMenu}>Statut de la copropriété</Link>
             <Link to="/report" onClick={closeMenu}>Nouvelle demande ou incident</Link>
             <Link to="/expenses" onClick={closeMenu}>Suivi des dépenses</Link>
+            <Link to="/statistics" onClick={closeMenu}>Statistiques</Link>
             {isLoggedIn && isAdmin && <Link to="/admin" onClick={closeMenu}>Administration</Link>}
           </div>
           <div className="nav-right">
@@ -434,6 +436,7 @@ function AppContent() {
           <Route path="/status" element={<Status />} />
           <Route path="/report" element={<ReportIncident />} />
           <Route path="/expenses" element={<Expenses />} />
+          <Route path="/statistics" element={<Statistics />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/login" element={<Login />} />
         </Routes>
