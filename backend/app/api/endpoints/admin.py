@@ -12,7 +12,7 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from app.db import get_db
 from app.models.copro import Copro, Building, ServiceInstance
-from app.models.status import Incident, IncidentUpdate, IncidentComment, IncidentStatus
+from app.models.status import Incident, IncidentUpdate as IncidentUpdateModel, IncidentComment, IncidentStatus
 from app.models.ticket import Ticket, TicketStatus, TicketType
 from app.models.ticket_comment import TicketComment
 from app.models.user import User
@@ -99,7 +99,13 @@ class TicketCommentCreate(BaseModel):
 
 
 class IncidentStatusUpdate(BaseModel):
-    status: str  # investigating, in_progress, resolved, closed
+    status: str
+
+
+class IncidentUpdate(BaseModel):
+    title: Optional[str] = None
+    message: Optional[str] = None
+    service_instance_id: Optional[int] = None  # investigating, in_progress, resolved, closed
 
 
 class IncidentCommentCreate(BaseModel):
@@ -738,43 +744,135 @@ async def update_incident_status(
     admin: User = Depends(get_admin_user)
 ):
     """Mettre à jour le statut d'un incident (admin uniquement)"""
+    try:
+        incident = db.query(Incident).filter(Incident.id == incident_id).first()
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incident non trouvé")
+        
+        # Convertir le statut string en enum
+        try:
+            new_status = IncidentStatus(status_update.status)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Statut invalide: {status_update.status}. Valeurs acceptées: investigating, in_progress, resolved, closed"
+            )
+        
+        # Si le statut est le même, ne rien faire
+        if incident.status == new_status:
+            return {"message": "Statut déjà à cette valeur", "incident_id": incident.id, "status": new_status.value}
+        
+        # Validation des transitions de statut
+        # Permettre toutes les transitions sauf depuis CLOSED
+        current_status = incident.status
+        
+        # Si l'incident est déjà clos, on ne peut plus changer le statut
+        if current_status == IncidentStatus.CLOSED:
+            raise HTTPException(
+                status_code=400,
+                detail="Impossible de modifier le statut d'un incident clos"
+            )
+        
+        # Pour les autres statuts, on permet toutes les transitions valides
+        valid_transitions = {
+            IncidentStatus.INVESTIGATING: [IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED, IncidentStatus.CLOSED],
+            IncidentStatus.IN_PROGRESS: [IncidentStatus.RESOLVED, IncidentStatus.CLOSED, IncidentStatus.INVESTIGATING],
+            IncidentStatus.RESOLVED: [IncidentStatus.CLOSED, IncidentStatus.IN_PROGRESS],
+            IncidentStatus.SCHEDULED: [IncidentStatus.INVESTIGATING, IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED, IncidentStatus.CLOSED]
+        }
+        
+        # Si la transition n'est pas dans la liste, on l'autorise quand même (sauf depuis CLOSED)
+        allowed_statuses = valid_transitions.get(current_status, [
+            IncidentStatus.INVESTIGATING,
+            IncidentStatus.IN_PROGRESS,
+            IncidentStatus.RESOLVED,
+            IncidentStatus.CLOSED
+        ])
+        
+        if new_status not in allowed_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Transition de statut invalide: {current_status.value} → {new_status.value}"
+            )
+        
+        # Sauvegarder l'ancien statut pour le message
+        old_status_value = current_status.value
+        
+        # Mettre à jour le statut
+        incident.status = new_status
+        if new_status == IncidentStatus.RESOLVED or new_status == IncidentStatus.CLOSED:
+            if not incident.resolved_at:
+                incident.resolved_at = datetime.utcnow()
+        
+        # Créer une mise à jour automatique seulement si le statut a changé
+        update = IncidentUpdateModel(
+            incident_id=incident_id,
+            message=f"Statut changé: {old_status_value} → {new_status.value}",
+            status=new_status
+        )
+        db.add(update)
+        
+        db.commit()
+        db.refresh(incident)
+        
+        return {"message": "Statut mis à jour", "incident_id": incident.id, "status": new_status.value}
+    except HTTPException as he:
+        db.rollback()
+        raise he
+    except Exception as e:
+        db.rollback()
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Erreur lors de la mise à jour du statut de l'incident: {e}")
+        print(f"Traceback: {error_trace}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors de la mise à jour du statut: {str(e)}"
+        )
+
+
+@router.put("/incidents/{incident_id}", response_model=dict)
+async def update_incident(
+    incident_id: int,
+    incident_update: IncidentUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Mettre à jour un incident (titre, description, équipement) (admin uniquement)"""
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident non trouvé")
     
-    new_status = IncidentStatus(status_update.status)
+    # Mettre à jour le titre si fourni
+    if incident_update.title is not None:
+        incident.title = incident_update.title
     
-    # Validation des transitions de statut
-    valid_transitions = {
-        IncidentStatus.INVESTIGATING: [IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED, IncidentStatus.CLOSED],
-        IncidentStatus.IN_PROGRESS: [IncidentStatus.RESOLVED, IncidentStatus.CLOSED],
-        IncidentStatus.RESOLVED: [IncidentStatus.CLOSED],
-        IncidentStatus.CLOSED: []  # Une fois clos, on ne peut plus changer
-    }
+    # Mettre à jour le message si fourni
+    if incident_update.message is not None:
+        incident.message = incident_update.message
     
-    if new_status not in valid_transitions.get(incident.status, []):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Transition de statut invalide: {incident.status.value} → {new_status.value}"
-        )
+    # Mettre à jour l'équipement si fourni
+    if incident_update.service_instance_id is not None:
+        # Vérifier que l'équipement existe et appartient à la même copropriété
+        service_instance = db.query(ServiceInstance).filter(
+            ServiceInstance.id == incident_update.service_instance_id,
+            ServiceInstance.copro_id == incident.copro_id
+        ).first()
+        if not service_instance:
+            raise HTTPException(status_code=404, detail="Équipement non trouvé")
+        incident.service_instance_id = incident_update.service_instance_id
     
-    # Mettre à jour le statut
-    incident.status = new_status
-    if new_status == IncidentStatus.RESOLVED or new_status == IncidentStatus.CLOSED:
-        incident.resolved_at = datetime.utcnow()
-    
-    # Créer une mise à jour automatique
-    update = IncidentUpdate(
-        incident_id=incident_id,
-        message=f"Statut changé: {incident.status.value} → {new_status.value}",
-        status=new_status
-    )
-    db.add(update)
-    
+    incident.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(incident)
     
-    return {"message": "Statut mis à jour", "incident_id": incident.id, "status": new_status.value}
+    return {
+        "message": "Incident mis à jour",
+        "incident_id": incident.id,
+        "title": incident.title,
+        "message": incident.message,
+        "service_instance_id": incident.service_instance_id
+    }
 
 
 @router.post("/incidents/{incident_id}/updates", status_code=status.HTTP_201_CREATED)
@@ -789,7 +887,7 @@ async def add_incident_update(
     if not incident:
         raise HTTPException(status_code=404, detail="Incident non trouvé")
     
-    update = IncidentUpdate(
+    update = IncidentUpdateModel(
         incident_id=incident_id,
         message=update_data.message,
         status=IncidentStatus(update_data.status)

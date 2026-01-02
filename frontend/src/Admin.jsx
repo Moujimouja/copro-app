@@ -41,6 +41,12 @@ function Admin() {
   })
   const [selectedTicket, setSelectedTicket] = useState(null)
   const [selectedIncident, setSelectedIncident] = useState(null)
+  const [isEditingIncident, setIsEditingIncident] = useState(false)
+  const [incidentEditData, setIncidentEditData] = useState({
+    title: '',
+    message: '',
+    service_instance_id: null
+  })
   const [showCommentForm, setShowCommentForm] = useState(false)
   const [showTicketCommentForm, setShowTicketCommentForm] = useState(null) // ID du ticket pour lequel on ajoute un commentaire
   const [newComment, setNewComment] = useState('')
@@ -331,6 +337,7 @@ function Admin() {
     } else if (activeTab === 'incidents') {
       loadIncidents()
       loadAdmins()
+      loadEquipments() // Charger les équipements pour la sélection dans l'édition
     } else if (activeTab === 'users') {
       loadUsers()
       loadBuildings()
@@ -339,9 +346,12 @@ function Admin() {
       loadEquipments()
     }
     
-    // Charger les tickets au démarrage pour afficher le compteur dans l'onglet (seulement si pas déjà chargé)
+    // Charger les tickets et incidents au démarrage pour afficher les compteurs dans les onglets (seulement si pas déjà chargés)
     if (activeTab !== 'tickets') {
       loadTickets()
+    }
+    if (activeTab !== 'incidents') {
+      loadIncidents()
     }
   }, [activeTab, loadEquipments, loadBuildings, loadTickets, loadCopro, loadIncidents, loadUsers, loadAdmins, loadMaintenances, navigate])
 
@@ -636,10 +646,64 @@ function Admin() {
       if (response.ok) {
         const data = await response.json()
         setSelectedIncident(data)
+        // Initialiser les données d'édition
+        setIncidentEditData({
+          title: data.title || '',
+          message: data.message || '',
+          service_instance_id: data.service_instance_id || null
+        })
+        setIsEditingIncident(false)
       }
     } catch (error) {
       console.error('Erreur chargement détails incident:', error)
     }
+  }
+
+  const updateIncident = async (incidentId, updateData) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(
+        `${API_URL}/api/v1/admin/incidents/${incidentId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updateData)
+        }
+      )
+      if (response.ok) {
+        toast.success('Incident mis à jour')
+        loadIncidents()
+        loadIncidentDetails(incidentId)
+      } else {
+        const error = await response.json()
+        toast.error(`Erreur: ${error.detail || 'Erreur lors de la mise à jour'}`)
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour incident:', error)
+      toast.error('Erreur lors de la mise à jour')
+    }
+  }
+
+  const handleIncidentEditChange = (e) => {
+    const { name, value } = e.target
+    setIncidentEditData(prev => ({
+      ...prev,
+      [name]: name === 'service_instance_id' ? (value ? parseInt(value) : null) : value
+    }))
+  }
+
+  const handleSaveIncidentEdit = async () => {
+    if (!selectedIncident) return
+    
+    await updateIncident(selectedIncident.id, {
+      title: incidentEditData.title,
+      message: incidentEditData.message,
+      service_instance_id: incidentEditData.service_instance_id
+    })
+    setIsEditingIncident(false)
   }
 
   const addIncidentComment = async (incidentId, comment) => {
@@ -2000,7 +2064,43 @@ function Admin() {
               <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                   <h3>Détails de l'incident: {selectedIncident.title}</h3>
-                  <button className="btn-close" onClick={() => setSelectedIncident(null)}>×</button>
+                  <div>
+                    {!isEditingIncident ? (
+                      <button 
+                        className="btn-edit" 
+                        onClick={() => setIsEditingIncident(true)}
+                        style={{ marginRight: '0.5rem' }}
+                      >
+                        ✏️ Modifier
+                      </button>
+                    ) : (
+                      <>
+                        <button 
+                          className="btn-cancel" 
+                          onClick={() => {
+                            setIsEditingIncident(false)
+                            // Restaurer les valeurs originales
+                            setIncidentEditData({
+                              title: selectedIncident.title || '',
+                              message: selectedIncident.message || '',
+                              service_instance_id: selectedIncident.service_instance_id || null
+                            })
+                          }}
+                          style={{ marginRight: '0.5rem' }}
+                        >
+                          Annuler
+                        </button>
+                        <button 
+                          className="btn-submit" 
+                          onClick={handleSaveIncidentEdit}
+                          style={{ marginRight: '0.5rem' }}
+                        >
+                          Enregistrer
+                        </button>
+                      </>
+                    )}
+                    <button className="btn-close" onClick={() => setSelectedIncident(null)}>×</button>
+                  </div>
                 </div>
                 <div className="incident-details">
                   <div className="incident-info">
@@ -2010,6 +2110,7 @@ function Admin() {
                         value={selectedIncident.status}
                         onChange={(e) => updateIncidentStatus(selectedIncident.id, e.target.value)}
                         className={`incident-status-select incident-status-${selectedIncident.status}`}
+                        disabled={isEditingIncident}
                       >
                         <option value="investigating">En cours d'analyse</option>
                         <option value="in_progress">En cours de traitement</option>
@@ -2017,8 +2118,57 @@ function Admin() {
                         <option value="closed">Clos</option>
                       </select>
                     </div>
-                    <p><strong>Description:</strong> {selectedIncident.message}</p>
-                    {selectedIncident.service_instance && <p><strong>Équipement:</strong> {selectedIncident.service_instance}</p>}
+                    {isEditingIncident ? (
+                      <>
+                        <div className="form-group">
+                          <label><strong>Titre:</strong></label>
+                          <input
+                            type="text"
+                            name="title"
+                            value={incidentEditData.title}
+                            onChange={handleIncidentEditChange}
+                            className="form-input"
+                            required
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label><strong>Description:</strong></label>
+                          <textarea
+                            name="message"
+                            value={incidentEditData.message}
+                            onChange={handleIncidentEditChange}
+                            className="form-input"
+                            rows="5"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label><strong>Équipement concerné:</strong></label>
+                          <select
+                            name="service_instance_id"
+                            value={incidentEditData.service_instance_id || ''}
+                            onChange={handleIncidentEditChange}
+                            className="form-input"
+                          >
+                            <option value="">Aucun équipement</option>
+                            {equipments.map(equipment => (
+                              <option key={equipment.id} value={equipment.id}>
+                                {equipment.name} {equipment.building_name ? `(${equipment.building_name})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p><strong>Titre:</strong> {selectedIncident.title}</p>
+                        <p><strong>Description:</strong> {selectedIncident.message || 'Aucune description'}</p>
+                        {selectedIncident.service_instance ? (
+                          <p><strong>Équipement:</strong> {selectedIncident.service_instance}</p>
+                        ) : (
+                          <p><strong>Équipement:</strong> Aucun équipement</p>
+                        )}
+                      </>
+                    )}
                     <p><strong>Créé le:</strong> {new Date(selectedIncident.created_at).toLocaleString('fr-FR')}</p>
                     {selectedIncident.resolved_at && <p><strong>Résolu le:</strong> {new Date(selectedIncident.resolved_at).toLocaleString('fr-FR')}</p>}
                   </div>
