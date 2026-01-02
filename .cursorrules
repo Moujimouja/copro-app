@@ -1,10 +1,13 @@
 You are an AI assistant helping to build a web application called "copro-app" for managing a single condominium residence.
 The goal of copro-app is to help manage condominium residence operations, including:
 - Login and user authentication (admin only for now, future: residents, syndic, council, maintenance)
-- Admin interface for managing equipment (ServiceInstance) and their status
-- Public incident reporting form (tickets) with QR code access
+- Admin interface for managing equipment (ServiceInstance), buildings, users, and their status
+- Public incident/request reporting form (tickets) with type selection (Incident or Request)
 - Status Page (similar to CachetHQ): show services of the residence (ex: elevators, doors, parking gates, heating) + uptime, incidents, scheduled maintenance
-- Ticket management: public can create tickets, admin reviews and can create incidents
+- Ticket management: public can create tickets, admin reviews with workflow (analyzing → in_progress → resolved → closed), can add comments, and can convert tickets to incidents
+- Incident management: admin can create, edit (title, description, equipment), update status, and add comments/updates
+- Maintenance management: scheduled maintenances with start/end dates and associated equipment
+- Expenses tracking: visualization of copropriété expenses
 - Dashboard and analytics showing overall availability and key metrics (future)
 - Notifications system (email, push) for incident updates (future)
 
@@ -12,46 +15,53 @@ The goal of copro-app is to help manage condominium residence operations, includ
 Backend: FastAPI (Python 3.11), PostgreSQL 15, Docker, JWT auth with bcrypt (direct, not passlib)
 Frontend: React 18 + Vite (SPA), no TypeScript yet (plain JSX)
 Target architecture: Docker-based (dev + prod), can run on AWS or on a Mac Freebox-exposed server
+CORS configured for localhost:5173 (Vite default port)
 
 📊 Data Models (SQLAlchemy)
-- Copro: Single copropriété (one instance = one copro)
-- Building: Buildings in the copro (A, B, 1, 2, etc.)
-- ServiceType: Template service types (Ascenseur, Éclairage, Eau chaude, etc.)
-- ServiceInstance: Actual equipment instances in buildings
-- Ticket: Public incident reports (pending → admin reviews → approved/rejected)
-- Incident: Official incidents created by admin
-- User: Users with is_superuser flag for admin access
+- Copro: Single copropriété (one instance = one copro) with name, address, city, postal_code, country
+- Building: Buildings in the copro (A, B, 1, 2, etc.) with order for display
+- ServiceInstance: Actual equipment instances in buildings with status (operational, degraded, partial_outage, major_outage, maintenance)
+- Ticket: Public incident/request reports with type (INCIDENT, REQUEST) and status (analyzing, in_progress, resolved, closed)
+- TicketComment: Admin comments on tickets, transferred to incidents when ticket is converted
+- Incident: Official incidents created by admin with status (investigating, in_progress, resolved, closed), editable title/description/equipment
+- IncidentUpdate: Status updates and messages on incidents
+- IncidentComment: Admin comments on incidents
+- Maintenance: Scheduled maintenances with start_date, end_date, and associated equipment
+- User: Users with is_superuser flag for admin access, copro_id for association
 
 🔑 Authentication
 - JWT-based authentication
-- Admin account: username "admin", password "admin123" (created via script)
+- Admin account: email "admin@example.com", password "admin123" (created via init_test_data script)
 - Only admins can access /admin routes
-- Public routes: /status, /report (no auth required)
+- Public routes: /status, /report, /expenses (no auth required)
 
 📁 Project Structure
 backend/app/
 ├── models/
-│   ├── copro.py          # Copro, Building, ServiceType, ServiceInstance
-│   ├── status.py         # Incident, IncidentUpdate, ServiceStatus enums
-│   ├── ticket.py         # Ticket, TicketStatus
+│   ├── copro.py          # Copro, Building, ServiceInstance
+│   ├── status.py         # Incident, IncidentUpdate, IncidentComment, ServiceStatus enums
+│   ├── ticket.py         # Ticket, TicketStatus, TicketType
+│   ├── ticket_comment.py # TicketComment
+│   ├── maintenance.py    # Maintenance
 │   └── user.py           # User (with copro_id, is_superuser)
 ├── api/endpoints/
-│   ├── admin.py          # Admin-only endpoints (equipment, incidents, tickets)
+│   ├── admin.py          # Admin-only endpoints (equipment, incidents, tickets, maintenances, users)
 │   ├── auth.py           # Login, register
-│   ├── copro.py          # CRUD for copro entities (if needed)
 │   ├── public.py         # Public endpoints (ticket creation, service list)
 │   └── status.py         # Status page data (public)
 ├── scripts/
-│   ├── create_admin.py   # Create admin user
-│   └── seed_copro.py     # Seed sample copro with buildings/services
+│   ├── init_test_data.py # Initialize test data (copro, buildings, equipment, admin user)
+│   ├── migrate_ticket_type.py    # Migration for ticket type column
+│   └── migrate_ticket_status.py  # Migration for ticket status enum
 └── core/config.py        # Settings (CORS, DB, etc.)
 
 frontend/src/
-├── App.jsx               # Main app with routing, header
-├── Admin.jsx             # Admin interface (equipment management, tickets)
-├── Status.jsx            # Public status page
-├── ReportIncident.jsx    # Public incident reporting form with QR code
-└── Login.jsx             # Login form
+├── App.jsx               # Main app with routing, sticky header with burger menu
+├── Admin.jsx             # Admin interface (equipment, tickets, incidents, maintenances, users, copro management)
+├── Status.jsx            # Public status page with modern design
+├── ReportIncident.jsx    # Public incident/request reporting form with type selection
+├── Expenses.jsx           # Expenses tracking page
+└── Login.jsx             # Login form (integrated in App.jsx)
 
 📌 Key requirements:
 - App is for ONE copropriété per instance (simplified, no multi-tenant)
@@ -59,7 +69,30 @@ frontend/src/
 - Code must be clean and maintainable (DDD or modular services)
 - API documented using OpenAPI (FastAPI auto-docs)
 - Frontend communicates via REST API
-- Mobile-friendly design (responsive)
+- Mobile-friendly design (responsive with burger menu)
+- Form validation with clear error messages
+- Conditional field requirements (equipment optional for requests)
+
+🎯 Ticket Workflow:
+1. Public creates ticket (type: Incident or Request)
+2. Status: analyzing (default) → in_progress → resolved → closed
+3. Admin can add comments at any stage
+4. Admin can convert ticket to incident (comments are transferred)
+5. Equipment field is required for incidents, optional for requests
+
+🎯 Incident Management:
+- Admin can create incidents directly or from tickets
+- Admin can edit: title, description, equipment
+- Admin can update status with validation
+- Admin can add comments and updates
+- Status workflow: investigating → in_progress → resolved → closed
+
+🎯 Status Page Features:
+- Modern design with circular copropriété image
+- Buildings grouped with collapsible sections
+- Buildings with all services operational are collapsed by default
+- Shows active incidents and maintenances
+- Shows incident history
 
 🧪 Development workflow
 - Whenever I ask for code, update existing files instead of rewriting everything
@@ -67,16 +100,25 @@ frontend/src/
 - Ask clarifying questions if requirements are ambiguous
 - Keep long-term coherence in naming, folder structure, auth flow
 - Use bcrypt directly (not passlib) for password hashing
-- CORS configured for localhost:5173 and localhost:3000
+- CORS configured for localhost:5173 (Vite default port)
+- Use IncidentUpdateModel (not IncidentUpdate) for SQLAlchemy model to avoid conflict with Pydantic schema
 
 🚨 Cursor should remember:
 - Single copropriété per instance (not multi-tenant)
 - Status page + incident ticketing are core features
 - Admin interface for equipment management is essential
-- Public ticket form with QR code for easy access
+- Public ticket form with type selection (Incident/Request)
+- Ticket workflow with status progression
+- Admin comments on tickets and incidents
+- Ticket to incident conversion with comment transfer
+- Incident editing (title, description, equipment)
+- Maintenance management with date ranges
 - Deployment simplicity is a priority
 - Use ServiceInstance (not old Service model) for equipment
 - Admin routes require is_superuser = True
+- Frontend port is 5173 (Vite default), not 3000
+- Header is sticky with burger menu on mobile
+- Buildings with all operational services are collapsed by default
 
 🎯 What you should do when I ask:
 1️⃣ Understand context + architecture
@@ -84,9 +126,11 @@ frontend/src/
 3️⃣ Suggest folder/content updates
 4️⃣ Give me Docker and production guidance when needed
 5️⃣ Remember: one copro per instance, admin-only management, public reporting
+6️⃣ Use IncidentUpdateModel for SQLAlchemy, IncidentUpdate for Pydantic schemas
 
 🔧 Available Scripts
-- Create admin: `python -m app.scripts.create_admin` (creates admin/admin123)
-- Seed copro: `python -m app.scripts.seed_copro` (creates sample copro with buildings/services)
+- Initialize test data: `python -m app.scripts.init_test_data` (creates copro, buildings, equipment, admin@example.com/admin123)
+- Migrate ticket type: `python -m app.scripts.migrate_ticket_type`
+- Migrate ticket status: `python -m app.scripts.migrate_ticket_status`
 
 If any task is unclear, ask questions before producing code.
