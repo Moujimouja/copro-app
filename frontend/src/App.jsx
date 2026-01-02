@@ -385,27 +385,47 @@ function AppContent() {
     localStorage.removeItem('token')
     setIsLoggedIn(false)
     setIsAdmin(false)
+    setIsMenuOpen(false)
     // Déclencher un événement pour mettre à jour l'état de connexion
     window.dispatchEvent(new Event('loginStateChanged'))
     // Rediriger vers l'accueil
     navigate('/status')
   }
 
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen)
+  }
+
+  const closeMenu = () => {
+    setIsMenuOpen(false)
+  }
+
   return (
     <div className="app">
-      <nav>
+      <nav className={isMenuOpen ? 'menu-open' : ''}>
+        <div className="nav-header">
+          <button className={`burger-menu ${isMenuOpen ? 'active' : ''}`} onClick={toggleMenu} aria-label="Toggle menu">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+        </div>
+        <div className="nav-content">
           <div className="nav-left">
-            <Link to="/status">Statut de la copropriété</Link>
-            <Link to="/report">Nouvelle demande ou incident</Link>
-            <Link to="/expenses">Suivi des dépenses</Link>
-            {isLoggedIn && isAdmin && <Link to="/admin">Administration</Link>}
+            <Link to="/status" onClick={closeMenu}>Statut de la copropriété</Link>
+            <Link to="/report" onClick={closeMenu}>Nouvelle demande ou incident</Link>
+            <Link to="/expenses" onClick={closeMenu}>Suivi des dépenses</Link>
+            {isLoggedIn && isAdmin && <Link to="/admin" onClick={closeMenu}>Administration</Link>}
           </div>
-        <div className="nav-right">
-          {isLoggedIn ? (
-            <button onClick={handleLogout} className="btn-logout">Déconnexion</button>
-          ) : (
-            <Link to="/login">Login</Link>
-          )}
+          <div className="nav-right">
+            {isLoggedIn ? (
+              <button onClick={handleLogout} className="btn-logout">Déconnexion</button>
+            ) : (
+              <Link to="/login" onClick={closeMenu}>Login</Link>
+            )}
+          </div>
         </div>
       </nav>
       <main>

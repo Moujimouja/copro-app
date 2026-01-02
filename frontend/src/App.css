@@ -26,6 +26,40 @@ nav {
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.nav-header {
+  display: none;
+}
+
+.burger-menu {
+  display: none;
+  flex-direction: column;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  gap: 4px;
+}
+
+.burger-menu span {
+  width: 25px;
+  height: 3px;
+  background-color: white;
+  transition: all 0.3s ease;
+  border-radius: 2px;
+}
+
+.nav-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 1rem;
 }
 
 .nav-left {
@@ -71,26 +105,75 @@ nav a:hover {
 
 @media (max-width: 768px) {
   nav {
-    padding: 1rem;
+    padding: 0;
     flex-direction: column;
     align-items: stretch;
   }
 
+  .nav-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    width: 100%;
+  }
+
+  .burger-menu {
+    display: flex;
+  }
+
+  .burger-menu.active span:nth-child(1) {
+    transform: rotate(45deg) translate(8px, 8px);
+  }
+
+  .burger-menu.active span:nth-child(2) {
+    opacity: 0;
+  }
+
+  .burger-menu.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(7px, -7px);
+  }
+
+  .nav-content {
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    padding: 0 1rem 1rem 1rem;
+    gap: 0;
+  }
+
+  nav.menu-open .nav-content {
+    display: flex;
+  }
+
   .nav-left {
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0;
     width: 100%;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 0.5rem;
   }
 
   .nav-right {
     width: 100%;
     justify-content: flex-end;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 0.5rem;
+    margin-top: 0.5rem;
   }
 
   nav a,
   .btn-logout {
     padding: 0.75rem;
-    text-align: center;
+    text-align: left;
+    display: block;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  nav a:last-child,
+  .nav-right .btn-logout {
+    border-bottom: none;
   }
 
   /* Toast notifications mobile */
