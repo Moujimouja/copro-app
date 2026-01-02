@@ -180,18 +180,33 @@ function Status() {
         <h1>Statut des équipements et services de la copropriété</h1>
         {statusData.copro && (
           <div className="copro-info">
-            <h3>{statusData.copro.name}</h3>
-            {(statusData.copro.address || statusData.copro.city || statusData.copro.postal_code) && (
-              <p className="copro-address">
-                {statusData.copro.address && <span>{statusData.copro.address}</span>}
-                {statusData.copro.address && (statusData.copro.city || statusData.copro.postal_code) && <span>, </span>}
-                {statusData.copro.postal_code && <span>{statusData.copro.postal_code}</span>}
-                {statusData.copro.postal_code && statusData.copro.city && <span> </span>}
-                {statusData.copro.city && <span>{statusData.copro.city}</span>}
-                {statusData.copro.country && (statusData.copro.city || statusData.copro.postal_code || statusData.copro.address) && <span>, </span>}
-                {statusData.copro.country && <span>{statusData.copro.country}</span>}
-              </p>
-            )}
+            <div className="copro-info-content">
+              <div className="copro-image-container">
+                <img 
+                  src="https://images.squarespace-cdn.com/content/v1/63dd345d04b310097e0bafcf/08d1a6eb-d0f7-4dde-a0a9-b8463c5b1eb0/4+bis+rue+Fabre+d%27E%CC%81glantine+75012+Paris+-+Maison+Cotard+-+3.jpg?format=1500w" 
+                  alt={`Photo de ${statusData.copro.name}`}
+                  className="copro-map-image"
+                  onError={(e) => {
+                    // Fallback vers une image placeholder si l'image ne charge pas
+                    e.target.src = 'https://via.placeholder.com/200x200/3498db/ffffff?text=📍'
+                  }}
+                />
+              </div>
+              <div className="copro-text-content">
+                <h3>{statusData.copro.name}</h3>
+                {(statusData.copro.address || statusData.copro.city || statusData.copro.postal_code) && (
+                  <p className="copro-address">
+                    {statusData.copro.address && <span>{statusData.copro.address}</span>}
+                    {statusData.copro.address && (statusData.copro.city || statusData.copro.postal_code) && <span>, </span>}
+                    {statusData.copro.postal_code && <span>{statusData.copro.postal_code}</span>}
+                    {statusData.copro.postal_code && statusData.copro.city && <span> </span>}
+                    {statusData.copro.city && <span>{statusData.copro.city}</span>}
+                    {statusData.copro.country && (statusData.copro.city || statusData.copro.postal_code || statusData.copro.address) && <span>, </span>}
+                    {statusData.copro.country && <span>{statusData.copro.country}</span>}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         )}
         <div className={`overall-status ${getStatusClass(statusData.overall_status)}`}>
