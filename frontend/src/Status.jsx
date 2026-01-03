@@ -106,40 +106,6 @@ function Status() {
     })
   }
 
-  const updateServiceStatus = async (serviceId, newStatus) => {
-    try {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        toast.error('Vous devez être connecté pour modifier le statut')
-        return
-      }
-
-      const response = await fetch(`${API_URL}/api/v1/admin/service-instances/${serviceId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: newStatus })
-      })
-
-      if (response.ok) {
-        toast.success('Statut mis à jour')
-        // Recharger les données
-        fetchStatus()
-      } else if (response.status === 401 || response.status === 403) {
-        toast.error('Accès refusé. Vous devez être administrateur.')
-        setIsAdmin(false)
-      } else {
-        const errorData = await response.json().catch(() => ({ detail: 'Erreur lors de la mise à jour' }))
-        toast.error(`Erreur: ${errorData.detail || 'Erreur lors de la mise à jour'}`)
-      }
-    } catch (error) {
-      console.error('Erreur mise à jour statut:', error)
-      toast.error('Erreur de connexion')
-    }
-  }
-
   const statusOptions = [
     { value: 'operational', label: 'Opérationnel', color: '#10b981' },
     { value: 'degraded', label: 'Dégradé', color: '#f59e0b' },
@@ -307,22 +273,6 @@ function Status() {
                                 )}
                                 <span className="service-status-badge">{getStatusLabel(service.status)}</span>
                               </div>
-                              {isAdmin && (
-                                <select
-                                  className="service-status-dropdown"
-                                  value={service.status}
-                                  onChange={(e) => updateServiceStatus(service.id, e.target.value)}
-                                  style={{
-                                    borderColor: statusOptions.find(opt => opt.value === service.status)?.color || '#e5e7eb'
-                                  }}
-                                >
-                                  {statusOptions.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
                             </div>
                           ))}
                         </div>

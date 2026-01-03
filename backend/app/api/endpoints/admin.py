@@ -68,13 +68,15 @@ class ServiceInstanceResponse(BaseModel):
 
 
 class IncidentCreate(BaseModel):
-    service_instance_id: Optional[int] = None
+    service_instance_id: Optional[int] = None  # DEPRECATED: utiliser service_instance_ids
+    service_instance_ids: Optional[List[int]] = None  # Liste des équipements concernés
     title: str
     message: str
     status: str = "investigating"
     is_scheduled: bool = False
     scheduled_for: Optional[datetime] = None
     created_at: Optional[datetime] = None  # Date de début réel de l'incident
+    equipment_status: Optional[str] = None  # Statut à appliquer à l'équipement (degraded, partial_outage, major_outage, maintenance)
 
 
 class IncidentUpdateCreate(BaseModel):
@@ -636,34 +638,107 @@ async def create_incident(
     db: Session = Depends(get_db),
     admin: User = Depends(get_admin_user)
 ):
-    """Créer un incident (admin uniquement)"""
+    """Créer un incident (admin uniquement) - peut créer plusieurs incidents si plusieurs équipements sont spécifiés"""
+    # Déterminer la liste des équipements
+    equipment_ids = []
+    if incident_data.service_instance_ids:
+        equipment_ids = incident_data.service_instance_ids
+    elif incident_data.service_instance_id:
+        # Support de l'ancien format pour rétrocompatibilité
+        equipment_ids = [incident_data.service_instance_id]
+    
+    # Si des équipements sont spécifiés, le statut de l'équipement est obligatoire
+    if equipment_ids and not incident_data.equipment_status:
+        raise HTTPException(
+            status_code=400,
+            detail="Le statut de l'équipement est obligatoire lorsqu'un ou plusieurs équipements sont sélectionnés"
+        )
+    
+    # Valider le statut si fourni
+    if incident_data.equipment_status:
+        valid_statuses = ["degraded", "partial_outage", "major_outage", "maintenance"]
+        if incident_data.equipment_status not in valid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Statut d'équipement invalide. Valeurs acceptées: {valid_statuses}"
+            )
+    
+    # Récupérer la copropriété (depuis le premier équipement ou la copropriété active)
     copro_id = None
-    
-    # Si un service_instance est spécifié, récupérer la copropriété
-    if incident_data.service_instance_id:
-        service_instance = db.query(ServiceInstance).filter(
-            ServiceInstance.id == incident_data.service_instance_id
+    if equipment_ids:
+        first_equipment = db.query(ServiceInstance).filter(
+            ServiceInstance.id == equipment_ids[0]
         ).first()
-        if not service_instance:
+        if not first_equipment:
             raise HTTPException(status_code=404, detail="Équipement non trouvé")
-        copro_id = service_instance.copro_id
+        copro_id = first_equipment.copro_id
+    else:
+        # Si aucun équipement, utiliser la copropriété active
+        copro = db.query(Copro).filter(Copro.is_active == True).first()
+        if copro:
+            copro_id = copro.id
     
-    incident = Incident(
-        copro_id=copro_id,
-        service_instance_id=incident_data.service_instance_id,
-        title=incident_data.title,
-        message=incident_data.message,
-        status=IncidentStatus(incident_data.status),
-        is_scheduled=incident_data.is_scheduled,
-        scheduled_for=incident_data.scheduled_for,
-        created_at=incident_data.created_at if incident_data.created_at else datetime.utcnow()
-    )
+    created_incidents = []
+    created_at = incident_data.created_at if incident_data.created_at else datetime.utcnow()
     
-    db.add(incident)
+    # Créer un incident par équipement
+    if equipment_ids:
+        for equipment_id in equipment_ids:
+            service_instance = db.query(ServiceInstance).filter(
+                ServiceInstance.id == equipment_id
+            ).first()
+            if not service_instance:
+                db.rollback()
+                raise HTTPException(status_code=404, detail=f"Équipement {equipment_id} non trouvé")
+            
+            # Vérifier que tous les équipements appartiennent à la même copropriété
+            if service_instance.copro_id != copro_id:
+                db.rollback()
+                raise HTTPException(
+                    status_code=400,
+                    detail="Tous les équipements doivent appartenir à la même copropriété"
+                )
+            
+            incident = Incident(
+                copro_id=copro_id,
+                service_instance_id=equipment_id,
+                title=incident_data.title,
+                message=incident_data.message,
+                status=IncidentStatus(incident_data.status),
+                is_scheduled=incident_data.is_scheduled,
+                scheduled_for=incident_data.scheduled_for,
+                created_at=created_at
+            )
+            db.add(incident)
+            db.flush()
+            created_incidents.append(incident.id)
+            
+            # Mettre à jour le statut de l'équipement
+            if incident_data.equipment_status:
+                service_instance.status = incident_data.equipment_status
+                service_instance.updated_at = datetime.utcnow()
+    else:
+        # Créer un incident sans équipement
+        incident = Incident(
+            copro_id=copro_id,
+            service_instance_id=None,
+            title=incident_data.title,
+            message=incident_data.message,
+            status=IncidentStatus(incident_data.status),
+            is_scheduled=incident_data.is_scheduled,
+            scheduled_for=incident_data.scheduled_for,
+            created_at=created_at
+        )
+        db.add(incident)
+        db.flush()
+        created_incidents.append(incident.id)
+    
     db.commit()
-    db.refresh(incident)
     
-    return {"message": "Incident créé", "incident_id": incident.id}
+    if len(created_incidents) == 1:
+        return {"message": "Incident créé", "incident_id": created_incidents[0]}
+    else:
+        return {"message": f"{len(created_incidents)} incidents créés", "incident_ids": created_incidents}
 
 
 @router.get("/incidents", response_model=List[dict])

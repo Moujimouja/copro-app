@@ -62,9 +62,11 @@ function Admin() {
   const [simpleIncidentFormData, setSimpleIncidentFormData] = useState({
     title: '',
     message: '',
-    service_instance_id: null,
-    created_at: ''
+    service_instance_ids: [],
+    created_at: '',
+    equipment_status: ''
   })
+  const [incidentEquipmentSearch, setIncidentEquipmentSearch] = useState('')
   const [currentAdmin, setCurrentAdmin] = useState(null)
   const [showCoproForm, setShowCoproForm] = useState(false)
   const [editingCopro, setEditingCopro] = useState(null)
@@ -464,10 +466,41 @@ function Admin() {
   }
 
   const handleSimpleIncidentFormChange = (e) => {
-    const { name, value } = e.target
+    const { name, value, type, checked } = e.target
+    if (type === 'checkbox') {
+      const equipmentId = parseInt(value)
+      setSimpleIncidentFormData(prev => ({
+        ...prev,
+        service_instance_ids: checked
+          ? [...prev.service_instance_ids, equipmentId]
+          : prev.service_instance_ids.filter(id => id !== equipmentId)
+      }))
+    } else {
+      setSimpleIncidentFormData(prev => ({
+        ...prev,
+        [name]: value
+      }))
+    }
+  }
+
+  const toggleSelectAllEquipmentsForIncident = () => {
+    if (simpleIncidentFormData.service_instance_ids.length === equipments.length) {
+      setSimpleIncidentFormData(prev => ({
+        ...prev,
+        service_instance_ids: []
+      }))
+    } else {
+      setSimpleIncidentFormData(prev => ({
+        ...prev,
+        service_instance_ids: equipments.map(eq => eq.id)
+      }))
+    }
+  }
+
+  const removeEquipmentFromIncident = (equipmentId) => {
     setSimpleIncidentFormData(prev => ({
       ...prev,
-      [name]: name === 'service_instance_id' ? (value ? parseInt(value) : null) : value
+      service_instance_ids: prev.service_instance_ids.filter(id => id !== equipmentId)
     }))
   }
 
@@ -482,8 +515,12 @@ function Admin() {
         status: 'investigating'
       }
 
-      if (simpleIncidentFormData.service_instance_id) {
-        incidentData.service_instance_id = simpleIncidentFormData.service_instance_id
+      if (simpleIncidentFormData.service_instance_ids && simpleIncidentFormData.service_instance_ids.length > 0) {
+        incidentData.service_instance_ids = simpleIncidentFormData.service_instance_ids
+      }
+
+      if (simpleIncidentFormData.equipment_status) {
+        incidentData.equipment_status = simpleIncidentFormData.equipment_status
       }
 
       if (simpleIncidentFormData.created_at) {
@@ -504,9 +541,11 @@ function Admin() {
         setSimpleIncidentFormData({
           title: '',
           message: '',
-          service_instance_id: null,
-          created_at: ''
+          service_instance_ids: [],
+          created_at: '',
+          equipment_status: ''
         })
+        setIncidentEquipmentSearch('')
         loadIncidents()
       } else {
         const error = await response.json().catch(() => ({ detail: 'Erreur lors de la création de l\'incident' }))
@@ -2213,22 +2252,135 @@ function Admin() {
                     />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="simple-incident-equipment">Équipement concerné (optionnel)</label>
-                    <select
-                      id="simple-incident-equipment"
-                      name="service_instance_id"
-                      value={simpleIncidentFormData.service_instance_id || ''}
-                      onChange={handleSimpleIncidentFormChange}
-                      className="form-input"
-                    >
-                      <option value="">Aucun équipement</option>
-                      {equipments.map(equipment => (
-                        <option key={equipment.id} value={equipment.id}>
-                          {equipment.name} {equipment.building_name ? `(${equipment.building_name})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <label>
+                      Équipements concernés (optionnel)
+                      {simpleIncidentFormData.service_instance_ids.length > 0 && (
+                        <span className="selected-count">
+                          ({simpleIncidentFormData.service_instance_ids.length} sélectionné{simpleIncidentFormData.service_instance_ids.length > 1 ? 's' : ''})
+                        </span>
+                      )}
+                    </label>
+                    
+                    {/* Équipements sélectionnés (tags) */}
+                    {simpleIncidentFormData.service_instance_ids.length > 0 && (
+                      <div className="selected-equipments-tags">
+                        {simpleIncidentFormData.service_instance_ids.map(equipmentId => {
+                          const equipment = equipments.find(eq => eq.id === equipmentId)
+                          if (!equipment) return null
+                          return (
+                            <span key={equipmentId} className="equipment-tag">
+                              {equipment.name}
+                              {equipment.building_name && <span className="tag-building"> ({equipment.building_name})</span>}
+                              <button
+                                type="button"
+                                onClick={() => removeEquipmentFromIncident(equipmentId)}
+                                className="tag-remove"
+                                title="Retirer"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Zone de recherche et sélection */}
+                    <div className="equipment-multiselect">
+                      <div className="multiselect-header">
+                        <input
+                          type="text"
+                          placeholder="Rechercher un équipement..."
+                          value={incidentEquipmentSearch}
+                          onChange={(e) => setIncidentEquipmentSearch(e.target.value)}
+                          className="equipment-search-input"
+                        />
+                        <button
+                          type="button"
+                          onClick={toggleSelectAllEquipmentsForIncident}
+                          className="btn-select-all"
+                        >
+                          {simpleIncidentFormData.service_instance_ids.length === equipments.length
+                            ? 'Tout désélectionner'
+                            : 'Tout sélectionner'}
+                        </button>
+                      </div>
+                      
+                      {/* Liste des équipements filtrés, groupés par bâtiment */}
+                      <div className="equipment-list-container">
+                        {(() => {
+                          // Filtrer les équipements selon la recherche
+                          const filteredEquipments = equipments.filter(eq => {
+                            const searchLower = incidentEquipmentSearch.toLowerCase()
+                            return eq.name.toLowerCase().includes(searchLower) ||
+                                   (eq.building_name && eq.building_name.toLowerCase().includes(searchLower))
+                          })
+
+                          // Grouper par bâtiment
+                          const groupedByBuilding = {}
+                          filteredEquipments.forEach(eq => {
+                            const buildingName = eq.building_name || 'Autres'
+                            if (!groupedByBuilding[buildingName]) {
+                              groupedByBuilding[buildingName] = []
+                            }
+                            groupedByBuilding[buildingName].push(eq)
+                          })
+
+                          if (filteredEquipments.length === 0) {
+                            return (
+                              <p className="no-equipments-found">
+                                {incidentEquipmentSearch ? 'Aucun équipement ne correspond à votre recherche' : 'Aucun équipement disponible'}
+                              </p>
+                            )
+                          }
+
+                          return Object.entries(groupedByBuilding).map(([buildingName, buildingEquipments]) => (
+                            <div key={buildingName} className="equipment-building-group">
+                              <div className="building-group-header">
+                                <strong>{buildingName}</strong>
+                                <span className="building-count">({buildingEquipments.length})</span>
+                              </div>
+                              <div className="equipment-checkboxes">
+                                {buildingEquipments.map(equipment => (
+                                  <label
+                                    key={equipment.id}
+                                    className={`equipment-checkbox-label ${simpleIncidentFormData.service_instance_ids.includes(equipment.id) ? 'selected' : ''}`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      value={equipment.id}
+                                      checked={simpleIncidentFormData.service_instance_ids.includes(equipment.id)}
+                                      onChange={handleSimpleIncidentFormChange}
+                                    />
+                                    <span className="equipment-name">{equipment.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        })()}
+                      </div>
+                    </div>
                   </div>
+                  {simpleIncidentFormData.service_instance_ids.length > 0 && (
+                    <div className="form-group">
+                      <label htmlFor="simple-incident-equipment-status">Statut des équipements *</label>
+                      <select
+                        id="simple-incident-equipment-status"
+                        name="equipment_status"
+                        value={simpleIncidentFormData.equipment_status}
+                        onChange={handleSimpleIncidentFormChange}
+                        className="form-input"
+                        required
+                      >
+                        <option value="">Sélectionner un statut</option>
+                        <option value="degraded">Dégradé</option>
+                        <option value="partial_outage">Panne Partielle</option>
+                        <option value="major_outage">Panne Majeure</option>
+                        <option value="maintenance">Maintenance</option>
+                      </select>
+                    </div>
+                  )}
                   <div className="form-group">
                     <label htmlFor="simple-incident-date">Date de début de l'incident (optionnel)</label>
                     <input
@@ -2251,9 +2403,11 @@ function Admin() {
                         setSimpleIncidentFormData({
                           title: '',
                           message: '',
-                          service_instance_id: null,
-                          created_at: ''
+                          service_instance_ids: [],
+                          created_at: '',
+                          equipment_status: ''
                         })
+                        setIncidentEquipmentSearch('')
                       }}
                       className="btn-cancel"
                     >
