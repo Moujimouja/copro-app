@@ -1,8 +1,16 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Enum as SQLEnum, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from enum import Enum as PyEnum
 from app.db import Base
+
+# Table de liaison many-to-many entre Incident et ServiceInstance
+incident_service_instances = Table(
+    'incident_service_instances',
+    Base.metadata,
+    Column('incident_id', Integer, ForeignKey('incidents.id', ondelete='CASCADE'), primary_key=True),
+    Column('service_instance_id', Integer, ForeignKey('service_instances.id', ondelete='CASCADE'), primary_key=True)
+)
 
 
 class ServiceStatus(PyEnum):
@@ -60,7 +68,12 @@ class Incident(Base):
 
     # Relationships
     service = relationship("Service", back_populates="incidents")  # DEPRECATED
-    service_instance = relationship("ServiceInstance", back_populates="incidents")
+    service_instance = relationship("ServiceInstance", back_populates="incidents", foreign_keys=[service_instance_id])  # Pour rétrocompatibilité
+    service_instances = relationship(
+        "ServiceInstance",
+        secondary=incident_service_instances,
+        back_populates="incidents_multi"
+    )
     updates = relationship("IncidentUpdate", back_populates="incident", cascade="all, delete-orphan", order_by="IncidentUpdate.created_at")
     comments = relationship("IncidentComment", back_populates="incident", cascade="all, delete-orphan", order_by="IncidentComment.created_at")
 

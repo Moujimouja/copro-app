@@ -94,6 +94,37 @@ function Status() {
     return labelMap[status] || status
   }
 
+  const formatUpdateMessage = (message) => {
+    if (!message) return message
+    
+    // Pattern pour détecter "Statut changé: X → Y"
+    const statusChangePattern = /Statut changé:\s*(\w+)\s*→\s*(\w+)/i
+    
+    if (statusChangePattern.test(message)) {
+      const match = message.match(statusChangePattern)
+      if (match) {
+        const oldStatus = match[1]
+        const newStatus = match[2]
+        const oldStatusLabel = getStatusLabel(oldStatus)
+        const newStatusLabel = getStatusLabel(newStatus)
+        return message.replace(statusChangePattern, `Statut changé: ${oldStatusLabel} → ${newStatusLabel}`)
+      }
+    }
+    
+    // Si le message contient des statuts isolés, les traduire aussi
+    const statusWords = ['investigating', 'in_progress', 'resolved', 'closed', 'scheduled', 
+                          'operational', 'degraded', 'partial_outage', 'major_outage', 'maintenance']
+    let formattedMessage = message
+    statusWords.forEach(status => {
+      const regex = new RegExp(`\\b${status}\\b`, 'gi')
+      if (regex.test(formattedMessage)) {
+        formattedMessage = formattedMessage.replace(regex, getStatusLabel(status))
+      }
+    })
+    
+    return formattedMessage
+  }
+
   const formatDate = (dateString) => {
     if (!dateString) return ''
     const date = new Date(dateString)
@@ -346,6 +377,11 @@ function Status() {
                         {event.message && (
                           <p className="incident-message">{event.message}</p>
                         )}
+                        {event.service_instance_names && event.service_instance_names.length > 0 && (
+                          <p className="incident-equipment">
+                            <strong>{event.service_instance_names.length > 1 ? 'Équipements impactés' : 'Équipement impacté'}:</strong> {event.service_instance_names.join(', ')}
+                          </p>
+                        )}
                         <div className="incident-meta">
                           <span>Créé le {formatDate(event.created_at)}</span>
                         </div>
@@ -354,8 +390,10 @@ function Status() {
                             <h4>Mises à jour:</h4>
                             {event.updates.map((update) => (
                               <div key={update.id} className="incident-update">
-                                <span className="update-time">{formatDate(update.created_at)}</span>
-                                <p>{update.message}</p>
+                                <div className="update-header">
+                                  <span className="update-time">{formatDate(update.created_at)}</span>
+                                </div>
+                                <p className="update-message">{formatUpdateMessage(update.message)}</p>
                               </div>
                             ))}
                           </div>
@@ -426,6 +464,11 @@ function Status() {
                         {event.message && (
                           <p className="incident-message">{event.message}</p>
                         )}
+                        {event.service_instance_names && event.service_instance_names.length > 0 && (
+                          <p className="incident-equipment">
+                            <strong>{event.service_instance_names.length > 1 ? 'Équipements impactés' : 'Équipement impacté'}:</strong> {event.service_instance_names.join(', ')}
+                          </p>
+                        )}
                         <div className="incident-meta">
                           <span>Créé le {formatDate(event.created_at)}</span>
                           {event.resolved_at && (
@@ -437,8 +480,10 @@ function Status() {
                             <h4>Mises à jour:</h4>
                             {event.updates.map((update) => (
                               <div key={update.id} className="incident-update">
-                                <span className="update-time">{formatDate(update.created_at)}</span>
-                                <p>{update.message}</p>
+                                <div className="update-header">
+                                  <span className="update-time">{formatDate(update.created_at)}</span>
+                                </div>
+                                <p className="update-message">{formatUpdateMessage(update.message)}</p>
                               </div>
                             ))}
                           </div>

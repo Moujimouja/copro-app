@@ -68,6 +68,10 @@ function Admin() {
   })
   const [incidentEquipmentSearch, setIncidentEquipmentSearch] = useState('')
   const [currentAdmin, setCurrentAdmin] = useState(null)
+  const [showEquipmentStatusModal, setShowEquipmentStatusModal] = useState(false)
+  const [ticketToClose, setTicketToClose] = useState(null)
+  const [equipmentStatusForClose, setEquipmentStatusForClose] = useState('operational')
+  const [equipmentsToUpdate, setEquipmentsToUpdate] = useState([])
   const [showCoproForm, setShowCoproForm] = useState(false)
   const [editingCopro, setEditingCopro] = useState(null)
   const [coproFormData, setCoproFormData] = useState({
@@ -613,6 +617,78 @@ function Admin() {
   }
 
   const updateTicketStatus = async (ticketId, newStatus) => {
+    // Si le statut passe à "closed", ouvrir la popup pour choisir le statut des équipements
+    if (newStatus === 'closed') {
+      const ticket = tickets.find(t => t.id === ticketId)
+      if (!ticket) {
+        toast.error('Ticket non trouvé')
+        return
+      }
+      
+      // Récupérer les équipements concernés
+      const equipmentIds = []
+      
+      // Si le ticket a été converti en incident, récupérer tous les équipements de l'incident
+      if (ticket.incident_id) {
+        try {
+          const token = localStorage.getItem('token')
+          const incidentResponse = await fetch(
+            `${API_URL}/api/v1/admin/incidents/${ticket.incident_id}`,
+            {
+              headers: { 'Authorization': `Bearer ${token}` }
+            }
+          )
+          if (incidentResponse.ok) {
+            const incident = await incidentResponse.json()
+            // Récupérer tous les incidents liés (car un incident peut avoir plusieurs équipements via plusieurs incidents créés)
+            const allIncidentsResponse = await fetch(
+              `${API_URL}/api/v1/admin/incidents`,
+              {
+                headers: { 'Authorization': `Bearer ${token}` }
+              }
+            )
+            if (allIncidentsResponse.ok) {
+              const allIncidents = await allIncidentsResponse.json()
+              // Trouver tous les incidents avec le même titre et créés à la même date (incidents créés ensemble)
+              const relatedIncidents = allIncidents.filter(i => 
+                i.title === incident.title && 
+                new Date(i.created_at).getTime() === new Date(incident.created_at).getTime()
+              )
+              relatedIncidents.forEach(inc => {
+                if (inc.service_instance_id) {
+                  equipmentIds.push(inc.service_instance_id)
+                }
+              })
+            }
+          }
+        } catch (error) {
+          console.error('Erreur récupération incident:', error)
+        }
+      }
+      
+      // Si pas d'incident ou pas d'équipements trouvés, utiliser l'équipement du ticket
+      if (equipmentIds.length === 0 && ticket.service_instance_id) {
+        equipmentIds.push(ticket.service_instance_id)
+      }
+      
+      // Si aucun équipement, fermer directement le ticket
+      if (equipmentIds.length === 0) {
+        await performTicketStatusUpdate(ticketId, newStatus)
+        return
+      }
+      
+      // Stocker les informations et ouvrir la popup
+      setEquipmentsToUpdate(equipmentIds)
+      setTicketToClose({ id: ticketId, newStatus })
+      setEquipmentStatusForClose('operational')
+      setShowEquipmentStatusModal(true)
+    } else {
+      // Pour les autres statuts, mettre à jour directement
+      await performTicketStatusUpdate(ticketId, newStatus)
+    }
+  }
+
+  const performTicketStatusUpdate = async (ticketId, newStatus, equipmentStatus = null, equipmentIds = []) => {
     try {
       const token = localStorage.getItem('token')
       const response = await fetch(
@@ -627,6 +703,10 @@ function Admin() {
         }
       )
       if (response.ok) {
+        // Si un statut d'équipement est fourni, mettre à jour les équipements
+        if (equipmentStatus && equipmentIds.length > 0) {
+          await updateMultipleEquipmentStatus(equipmentIds, equipmentStatus)
+        }
         toast.success('Statut mis à jour')
         loadTickets()
       } else {
@@ -636,6 +716,47 @@ function Admin() {
     } catch (error) {
       console.error('Erreur mise à jour statut:', error)
       toast.error('Erreur lors de la mise à jour du statut')
+    }
+  }
+
+  const updateMultipleEquipmentStatus = async (equipmentIds, status) => {
+    const token = localStorage.getItem('token')
+    const promises = equipmentIds.map(equipmentId =>
+      fetch(
+        `${API_URL}/api/v1/admin/service-instances/${equipmentId}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status })
+        }
+      )
+    )
+    
+    try {
+      const results = await Promise.all(promises)
+      const allOk = results.every(r => r.ok)
+      if (allOk) {
+        toast.success(`${equipmentIds.length} équipement(s) mis à jour`)
+        loadEquipments()
+      } else {
+        toast.error('Erreur lors de la mise à jour de certains équipements')
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour équipements:', error)
+      toast.error('Erreur lors de la mise à jour des équipements')
+    }
+  }
+
+  const handleCloseTicketWithEquipmentStatus = async () => {
+    if (ticketToClose && equipmentsToUpdate.length > 0) {
+      await performTicketStatusUpdate(ticketToClose.id, ticketToClose.newStatus, equipmentStatusForClose, equipmentsToUpdate)
+      setShowEquipmentStatusModal(false)
+      setTicketToClose(null)
+      setEquipmentsToUpdate([])
+      setEquipmentStatusForClose('operational')
     }
   }
 
@@ -771,11 +892,13 @@ function Admin() {
         setSelectedIncident(data)
         // Initialiser les données d'édition
         const createdDate = data.created_at ? new Date(data.created_at).toISOString().slice(0, 16) : ''
+        const resolvedDate = data.resolved_at ? new Date(data.resolved_at).toISOString().slice(0, 16) : ''
         setIncidentEditData({
           title: data.title || '',
           message: data.message || '',
           service_instance_id: data.service_instance_id || null,
-          created_at: createdDate
+          created_at: createdDate,
+          resolved_at: resolvedDate
         })
         setIsEditingIncident(false)
       }
@@ -832,6 +955,14 @@ function Admin() {
     // Ajouter la date de création si elle a été modifiée
     if (incidentEditData.created_at) {
       updateData.created_at = new Date(incidentEditData.created_at).toISOString()
+    }
+    
+    // Ajouter la date de résolution si elle a été modifiée
+    if (incidentEditData.resolved_at) {
+      updateData.resolved_at = new Date(incidentEditData.resolved_at).toISOString()
+    } else if (incidentEditData.resolved_at === '') {
+      // Si le champ est vide, mettre à null pour supprimer la date de résolution
+      updateData.resolved_at = null
     }
     
     await updateIncident(selectedIncident.id, updateData)
@@ -2027,8 +2158,8 @@ function Admin() {
                   </div>
                   <select
                     value={ticket.status}
-                    onChange={(e) => {
-                      updateTicketStatus(ticket.id, e.target.value)
+                    onChange={async (e) => {
+                      await updateTicketStatus(ticket.id, e.target.value)
                     }}
                     className={`ticket-status-select ticket-status-${ticket.status}`}
                   >
@@ -2514,6 +2645,19 @@ function Admin() {
                             Date correspondant au début réel de l'incident
                           </small>
                         </div>
+                        <div className="form-group">
+                          <label><strong>Date de résolution:</strong></label>
+                          <input
+                            type="datetime-local"
+                            name="resolved_at"
+                            value={incidentEditData.resolved_at}
+                            onChange={handleIncidentEditChange}
+                            className="form-input"
+                          />
+                          <small style={{ color: '#666', fontSize: '0.85rem', display: 'block', marginTop: '0.25rem' }}>
+                            Laisser vide pour supprimer la date de résolution
+                          </small>
+                        </div>
                         <div className="form-actions" style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
                           <button 
                             type="button"
@@ -2522,11 +2666,13 @@ function Admin() {
                               setIsEditingIncident(false)
                               // Restaurer les valeurs originales
                               const createdDate = selectedIncident.created_at ? new Date(selectedIncident.created_at).toISOString().slice(0, 16) : ''
+                              const resolvedDate = selectedIncident.resolved_at ? new Date(selectedIncident.resolved_at).toISOString().slice(0, 16) : ''
                               setIncidentEditData({
                                 title: selectedIncident.title || '',
                                 message: selectedIncident.message || '',
                                 service_instance_id: selectedIncident.service_instance_id || null,
-                                created_at: createdDate
+                                created_at: createdDate,
+                                resolved_at: resolvedDate
                               })
                             }}
                           >
@@ -2546,7 +2692,7 @@ function Admin() {
                         <p><strong>Titre:</strong> {selectedIncident.title}</p>
                         <p><strong>Description:</strong> {selectedIncident.message || 'Aucune description'}</p>
                         {selectedIncident.service_instance ? (
-                          <p><strong>Équipement:</strong> {selectedIncident.service_instance}</p>
+                          <p><strong>{selectedIncident.service_instance_ids && selectedIncident.service_instance_ids.length > 1 ? 'Équipements affectés' : 'Équipement concerné'}:</strong> {selectedIncident.service_instance}</p>
                         ) : (
                           <p><strong>Équipement:</strong> Aucun équipement</p>
                         )}
@@ -3050,6 +3196,57 @@ function Admin() {
             {maintenances.length === 0 && (
               <p className="no-equipments">Aucune maintenance configurée.</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal pour choisir le statut des équipements lors de la fermeture d'un ticket */}
+      {showEquipmentStatusModal && (
+        <div className="modal-overlay" onClick={() => setShowEquipmentStatusModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Choisir le statut des équipements</h3>
+              <button className="btn-close" onClick={() => setShowEquipmentStatusModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p>Le ticket va être fermé. Choisissez le statut à appliquer aux {equipmentsToUpdate.length} équipement(s) concerné(s) :</p>
+              <div className="form-group">
+                <label htmlFor="equipment-status-close">Statut des équipements *</label>
+                <select
+                  id="equipment-status-close"
+                  value={equipmentStatusForClose}
+                  onChange={(e) => setEquipmentStatusForClose(e.target.value)}
+                  className="form-input"
+                >
+                  <option value="operational">Opérationnel</option>
+                  <option value="degraded">Performance dégradée</option>
+                  <option value="partial_outage">Panne partielle</option>
+                  <option value="major_outage">Panne majeure</option>
+                  <option value="maintenance">En maintenance</option>
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEquipmentStatusModal(false)
+                  setTicketToClose(null)
+                  setEquipmentsToUpdate([])
+                  setEquipmentStatusForClose('operational')
+                }}
+                className="btn-cancel"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleCloseTicketWithEquipmentStatus}
+                className="btn-submit"
+              >
+                Fermer le ticket
+              </button>
+            </div>
           </div>
         </div>
       )}

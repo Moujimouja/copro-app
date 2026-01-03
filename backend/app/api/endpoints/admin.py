@@ -111,6 +111,7 @@ class IncidentUpdate(BaseModel):
     message: Optional[str] = None
     service_instance_id: Optional[int] = None
     created_at: Optional[datetime] = None  # Date de début réel de l'incident
+    resolved_at: Optional[datetime] = None  # Date de résolution
 
 
 class IncidentCommentCreate(BaseModel):
@@ -638,7 +639,7 @@ async def create_incident(
     db: Session = Depends(get_db),
     admin: User = Depends(get_admin_user)
 ):
-    """Créer un incident (admin uniquement) - peut créer plusieurs incidents si plusieurs équipements sont spécifiés"""
+    """Créer un incident (admin uniquement) - crée un seul incident avec plusieurs équipements via table de liaison"""
     # Déterminer la liste des équipements
     equipment_ids = []
     if incident_data.service_instance_ids:
@@ -665,80 +666,60 @@ async def create_incident(
     
     # Récupérer la copropriété (depuis le premier équipement ou la copropriété active)
     copro_id = None
+    service_instances = []
     if equipment_ids:
-        first_equipment = db.query(ServiceInstance).filter(
-            ServiceInstance.id == equipment_ids[0]
-        ).first()
-        if not first_equipment:
-            raise HTTPException(status_code=404, detail="Équipement non trouvé")
-        copro_id = first_equipment.copro_id
+        service_instances = db.query(ServiceInstance).filter(
+            ServiceInstance.id.in_(equipment_ids)
+        ).all()
+        if len(service_instances) != len(equipment_ids):
+            raise HTTPException(status_code=404, detail="Un ou plusieurs équipements non trouvés")
+        copro_id = service_instances[0].copro_id
+        
+        # Vérifier que tous les équipements appartiennent à la même copropriété
+        if not all(si.copro_id == copro_id for si in service_instances):
+            raise HTTPException(
+                status_code=400,
+                detail="Tous les équipements doivent appartenir à la même copropriété"
+            )
     else:
         # Si aucun équipement, utiliser la copropriété active
         copro = db.query(Copro).filter(Copro.is_active == True).first()
         if copro:
             copro_id = copro.id
     
-    created_incidents = []
     created_at = incident_data.created_at if incident_data.created_at else datetime.utcnow()
     
-    # Créer un incident par équipement
-    if equipment_ids:
-        for equipment_id in equipment_ids:
-            service_instance = db.query(ServiceInstance).filter(
-                ServiceInstance.id == equipment_id
-            ).first()
-            if not service_instance:
-                db.rollback()
-                raise HTTPException(status_code=404, detail=f"Équipement {equipment_id} non trouvé")
-            
-            # Vérifier que tous les équipements appartiennent à la même copropriété
-            if service_instance.copro_id != copro_id:
-                db.rollback()
-                raise HTTPException(
-                    status_code=400,
-                    detail="Tous les équipements doivent appartenir à la même copropriété"
-                )
-            
-            incident = Incident(
-                copro_id=copro_id,
-                service_instance_id=equipment_id,
-                title=incident_data.title,
-                message=incident_data.message,
-                status=IncidentStatus(incident_data.status),
-                is_scheduled=incident_data.is_scheduled,
-                scheduled_for=incident_data.scheduled_for,
-                created_at=created_at
-            )
-            db.add(incident)
-            db.flush()
-            created_incidents.append(incident.id)
-            
-            # Mettre à jour le statut de l'équipement
-            if incident_data.equipment_status:
+    # Créer un seul incident
+    # Utiliser le premier équipement pour service_instance_id (rétrocompatibilité)
+    first_service_instance_id = service_instances[0].id if service_instances else None
+    
+    incident = Incident(
+        copro_id=copro_id,
+        service_instance_id=first_service_instance_id,  # Pour rétrocompatibilité
+        title=incident_data.title,
+        message=incident_data.message,
+        status=IncidentStatus(incident_data.status),
+        is_scheduled=incident_data.is_scheduled,
+        scheduled_for=incident_data.scheduled_for,
+        created_at=created_at
+    )
+    db.add(incident)
+    db.flush()
+    
+    # Associer tous les équipements via la table de liaison
+    if service_instances:
+        incident.service_instances = service_instances
+        
+        # Mettre à jour le statut de tous les équipements
+        if incident_data.equipment_status:
+            for service_instance in service_instances:
                 service_instance.status = incident_data.equipment_status
                 service_instance.updated_at = datetime.utcnow()
-    else:
-        # Créer un incident sans équipement
-        incident = Incident(
-            copro_id=copro_id,
-            service_instance_id=None,
-            title=incident_data.title,
-            message=incident_data.message,
-            status=IncidentStatus(incident_data.status),
-            is_scheduled=incident_data.is_scheduled,
-            scheduled_for=incident_data.scheduled_for,
-            created_at=created_at
-        )
-        db.add(incident)
-        db.flush()
-        created_incidents.append(incident.id)
     
     db.commit()
+    db.refresh(incident, ['service_instances'])
     
-    if len(created_incidents) == 1:
-        return {"message": "Incident créé", "incident_id": created_incidents[0]}
-    else:
-        return {"message": f"{len(created_incidents)} incidents créés", "incident_ids": created_incidents}
+    return {"message": "Incident créé", "incident_id": incident.id}
 
 
 @router.get("/incidents", response_model=List[dict])
@@ -761,19 +742,27 @@ async def list_incidents(
     
     result = []
     for incident in incidents:
-        db.refresh(incident, ['service_instance'])
-        # Récupérer le statut de l'équipement si un équipement est associé
+        db.refresh(incident, ['service_instance', 'service_instances'])
+        # Récupérer le statut de l'équipement si un équipement est associé (pour rétrocompatibilité)
         equipment_status = None
         if incident.service_instance:
             equipment_status = incident.service_instance.status
+        
+        # Récupérer les noms des équipements (via la table de liaison ou service_instance pour rétrocompatibilité)
+        service_instance_names = []
+        if incident.service_instances and len(incident.service_instances) > 0:
+            service_instance_names = [si.name for si in incident.service_instances]
+        elif incident.service_instance:
+            service_instance_names = [incident.service_instance.name]
         
         result.append({
             "id": incident.id,
             "title": incident.title,
             "message": incident.message,
             "status": incident.status.value,
-            "service_instance": incident.service_instance.name if incident.service_instance else None,
-            "service_instance_id": incident.service_instance_id,
+            "service_instance": ", ".join(service_instance_names) if service_instance_names else None,  # Afficher tous les équipements
+            "service_instance_id": incident.service_instance_id,  # Pour rétrocompatibilité
+            "service_instance_ids": [si.id for si in incident.service_instances] if incident.service_instances else ([incident.service_instance_id] if incident.service_instance_id else []),
             "created_at": incident.created_at.isoformat() if incident.created_at else None,
             "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
             "equipment_status": equipment_status,
@@ -793,7 +782,17 @@ async def get_incident(
     if not incident:
         raise HTTPException(status_code=404, detail="Incident non trouvé")
     
-    db.refresh(incident, ['service_instance', 'updates', 'comments'])
+    db.refresh(incident, ['service_instance', 'service_instances', 'updates', 'comments'])
+    
+    # Récupérer les équipements via la table de liaison ou service_instance pour rétrocompatibilité
+    service_instance_names = []
+    service_instance_ids = []
+    if incident.service_instances and len(incident.service_instances) > 0:
+        service_instance_names = [si.name for si in incident.service_instances]
+        service_instance_ids = [si.id for si in incident.service_instances]
+    elif incident.service_instance:
+        service_instance_names = [incident.service_instance.name]
+        service_instance_ids = [incident.service_instance_id]
     
     # Charger les commentaires avec les infos des admins
     comments = []
@@ -812,8 +811,9 @@ async def get_incident(
         "title": incident.title,
         "message": incident.message,
         "status": incident.status.value,
-        "service_instance": incident.service_instance.name if incident.service_instance else None,
-        "service_instance_id": incident.service_instance_id,
+        "service_instance": ", ".join(service_instance_names) if service_instance_names else None,
+        "service_instance_id": incident.service_instance_id,  # Pour rétrocompatibilité
+        "service_instance_ids": service_instance_ids,
         "created_at": incident.created_at.isoformat() if incident.created_at else None,
         "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
         "comments": comments,
@@ -851,12 +851,7 @@ async def update_incident_status(
         # Permettre toutes les transitions sauf depuis CLOSED
         current_status = incident.status
         
-        # Si l'incident est déjà clos, on ne peut plus changer le statut
-        if current_status == IncidentStatus.CLOSED:
-            raise HTTPException(
-                status_code=400,
-                detail="Impossible de modifier le statut d'un incident clos"
-            )
+        # Permettre la modification même si l'incident est clos
         
         # Pour les autres statuts, on permet toutes les transitions valides
         valid_transitions = {
@@ -950,6 +945,10 @@ async def update_incident(
     # Mettre à jour la date de création si fournie
     if incident_update.created_at is not None:
         incident.created_at = incident_update.created_at
+    
+    # Mettre à jour la date de résolution si fournie
+    if incident_update.resolved_at is not None:
+        incident.resolved_at = incident_update.resolved_at
     
     incident.updated_at = datetime.utcnow()
     db.commit()

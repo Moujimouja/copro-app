@@ -85,7 +85,12 @@ class ServiceInstance(Base):
 
     # Relationships
     building = relationship("Building", back_populates="service_instances")
-    incidents = relationship("Incident", back_populates="service_instance", cascade="all, delete-orphan")
+    incidents = relationship("Incident", back_populates="service_instance", foreign_keys="Incident.service_instance_id", cascade="all, delete-orphan")
+    incidents_multi = relationship(
+        "Incident",
+        secondary="incident_service_instances",
+        back_populates="service_instances"
+    )
     maintenances = relationship(
         "Maintenance",
         secondary="maintenance_service_instances",

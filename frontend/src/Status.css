@@ -866,16 +866,21 @@
   border-left: 2px solid #e5e7eb;
 }
 
+.incident-update .update-header {
+  margin-bottom: 0.5rem;
+}
+
 .incident-update .update-time {
   font-size: 0.75rem;
   color: #9ca3af;
   display: block;
-  margin-bottom: 0.5rem;
+  font-weight: 500;
 }
 
-.incident-update p {
+.incident-update .update-message {
   margin: 0;
   color: #4b5563;
+  line-height: 1.5;
 }
 
 .status-loading,
