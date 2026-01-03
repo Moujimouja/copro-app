@@ -224,6 +224,7 @@ function Status() {
           </div>
         )}
         <div className={`overall-status ${getStatusClass(statusData.overall_status)}`}>
+          <span className="status-label">Statut général</span>
           <span className="status-indicator"></span>
           <span className="status-text">{getStatusLabel(statusData.overall_status)}</span>
         </div>
