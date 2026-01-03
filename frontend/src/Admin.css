@@ -937,6 +937,27 @@
   opacity: 0.7;
 }
 
+/* Couleurs basées sur le statut de l'équipement (priorité) */
+.incident-card.status-degraded {
+  border-left: 4px solid #f59e0b; /* Orange/jaune pour dégradé */
+}
+
+.incident-card.status-partial {
+  border-left: 4px solid #f97316; /* Orange foncé pour panne partielle */
+}
+
+.incident-card.status-major {
+  border-left: 4px solid #ef4444; /* Rouge pour panne majeure */
+}
+
+.incident-card.status-maintenance {
+  border-left: 4px solid #6366f1; /* Violet/bleu pour maintenance */
+}
+
+.incident-card.status-operational {
+  border-left: 4px solid #10b981; /* Vert pour opérationnel */
+}
+
 .incident-header {
   display: flex;
   justify-content: space-between;

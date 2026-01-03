@@ -2150,10 +2150,15 @@ function Admin() {
             </button>
           </div>
           <div className="incidents-list">
-            {incidents.map(incident => (
+            {incidents.map(incident => {
+              // Utiliser le statut de l'équipement pour le liseret si disponible, sinon le statut de l'incident
+              const borderStatusClass = incident.equipment_status 
+                ? getStatusClass(incident.equipment_status) 
+                : `incident-${incident.status}`
+              return (
               <div 
                 key={incident.id} 
-                className={`incident-card incident-${incident.status}`}
+                className={`incident-card ${borderStatusClass}`}
                 onClick={() => {
                   setSelectedIncident(null)
                   loadIncidentDetails(incident.id)
@@ -2195,7 +2200,8 @@ function Admin() {
                   </button>
                 </div>
               </div>
-            ))}
+              )
+            })}
             {incidents.length === 0 && <p>Aucun incident</p>}
           </div>
 

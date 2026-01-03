@@ -60,6 +60,7 @@ class IncidentUpdateResponse(BaseModel):
 class IncidentResponse(BaseModel):
     id: int
     service_id: Optional[int]
+    service_instance_id: Optional[int] = None
     title: str
     message: Optional[str]
     status: str
@@ -69,6 +70,7 @@ class IncidentResponse(BaseModel):
     updated_at: Optional[datetime] = None
     resolved_at: Optional[datetime]
     updates: List[IncidentUpdateResponse] = []
+    equipment_status: Optional[str] = None  # Statut de l'équipement concerné
 
     class Config:
         from_attributes = True
@@ -76,9 +78,15 @@ class IncidentResponse(BaseModel):
     @classmethod
     def from_incident(cls, incident: Incident):
         """Convert Incident model to response"""
+        # Récupérer le statut de l'équipement si un équipement est associé
+        equipment_status = None
+        if incident.service_instance_id and incident.service_instance:
+            equipment_status = incident.service_instance.status
+        
         return cls(
             id=incident.id,
             service_id=incident.service_id,
+            service_instance_id=incident.service_instance_id,
             title=incident.title,
             message=incident.message,
             status=incident.status.value,
@@ -87,7 +95,8 @@ class IncidentResponse(BaseModel):
             created_at=incident.created_at,
             updated_at=incident.updated_at,
             resolved_at=incident.resolved_at,
-            updates=[IncidentUpdateResponse.from_update(update) for update in incident.updates] if incident.updates else []
+            updates=[IncidentUpdateResponse.from_update(update) for update in incident.updates] if incident.updates else [],
+            equipment_status=equipment_status
         )
 
 
@@ -161,8 +170,11 @@ async def get_status_page(db: Session = Depends(get_db)):
         ServiceInstance.is_active == True
     ).order_by(ServiceInstance.order, ServiceInstance.name).all()
     
-    # Get recent incidents (last 20)
-    incidents = db.query(Incident).filter(
+    # Get recent incidents (last 20) avec les relations chargées
+    from sqlalchemy.orm import joinedload
+    incidents = db.query(Incident).options(
+        joinedload(Incident.service_instance)
+    ).filter(
         Incident.copro_id == copro.id
     ).order_by(desc(Incident.created_at)).limit(20).all()
     

@@ -762,6 +762,11 @@ async def list_incidents(
     result = []
     for incident in incidents:
         db.refresh(incident, ['service_instance'])
+        # Récupérer le statut de l'équipement si un équipement est associé
+        equipment_status = None
+        if incident.service_instance:
+            equipment_status = incident.service_instance.status
+        
         result.append({
             "id": incident.id,
             "title": incident.title,
@@ -771,6 +776,7 @@ async def list_incidents(
             "service_instance_id": incident.service_instance_id,
             "created_at": incident.created_at.isoformat() if incident.created_at else None,
             "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
+            "equipment_status": equipment_status,
         })
     
     return result

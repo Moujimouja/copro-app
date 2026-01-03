@@ -331,8 +331,12 @@ function Status() {
                       </div>
                     )
                   } else {
+                    // Utiliser le statut de l'équipement pour le liseret si disponible, sinon le statut de l'incident
+                    const borderStatusClass = event.equipment_status 
+                      ? getStatusClass(event.equipment_status) 
+                      : getStatusClass(event.status)
                     return (
-                      <div key={`incident-${event.id}`} className={`incident-card ${getStatusClass(event.status)}`}>
+                      <div key={`incident-${event.id}`} className={`incident-card ${borderStatusClass}`}>
                         <div className="incident-header">
                           <h3>{event.title}</h3>
                           <span className={`incident-status ${getStatusClass(event.status)}`}>
@@ -407,8 +411,12 @@ function Status() {
                       </div>
                     )
                   } else {
+                    // Utiliser le statut de l'équipement pour le liseret si disponible, sinon le statut de l'incident
+                    const borderStatusClass = event.equipment_status 
+                      ? getStatusClass(event.equipment_status) 
+                      : getStatusClass(event.status)
                     return (
-                      <div key={`incident-${event.id}`} className={`incident-card incident-past ${getStatusClass(event.status)}`}>
+                      <div key={`incident-${event.id}`} className={`incident-card incident-past ${borderStatusClass}`}>
                         <div className="incident-header">
                           <h3>{event.title}</h3>
                           <span className={`incident-status ${getStatusClass(event.status)}`}>
